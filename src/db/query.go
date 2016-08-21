@@ -222,23 +222,35 @@ func (cxt *GraphqlContext) NodeInterface() *graphql.Interface {
 		Type:        graphql.NewList(cxt.AttrObject()),
 		Description: "list of node attributes as key/value pairs",
 	})
-	cxt.nodeInterface.AddFieldConfig("out", &graphql.Field{
+	cxt.nodeInterface.AddFieldConfig("edges", &graphql.Field{
 		Type: graphql.NewList(cxt.EdgeType()),
 		Args: graphql.FieldConfigArgument{
 			"name": &graphql.ArgumentConfig{
 				Type: graphql.String,
 			},
+			"dir": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
 		},
-		Description: "list of outbound edges",
+		Description: "list inbound/outbound edges",
+	})
+	cxt.nodeInterface.AddFieldConfig("out", &graphql.Field{
+		Type: graphql.NewList(cxt.NodeInterface()),
+		Args: graphql.FieldConfigArgument{
+			"name": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+		},
+		Description: "outbound connected nodes",
 	})
 	cxt.nodeInterface.AddFieldConfig("in", &graphql.Field{
-		Type: graphql.NewList(cxt.EdgeType()),
+		Type: graphql.NewList(cxt.NodeInterface()),
 		Args: graphql.FieldConfigArgument{
 			"name": &graphql.ArgumentConfig{
 				Type: graphql.String,
 			},
 		},
-		Description: "list of inbound edges",
+		Description: "inbound connected nodes",
 	})
 	return cxt.nodeInterface
 }
@@ -337,38 +349,59 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					return n.Attrs(), nil
 				},
 			},
-			"out": &graphql.Field{
+			"edges": &graphql.Field{
 				Type: graphql.NewList(cxt.EdgeType()),
 				Args: graphql.FieldConfigArgument{
 					"name": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
+					"dir": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
 				},
-				Description: "list of outbound edges",
+				Description: "outbound connected nodes",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
 						return nil, castError("out", p.Source, "Node")
 					}
 					edgeName, _ := p.Args["name"].(string)
-					return n.Out(edgeName), nil
+					edgeDir, _ := p.Args["dir"].(string)
+					return n.Edges(edgeName, edgeDir), nil
 				},
 			},
-			"in": &graphql.Field{
-				Type: graphql.NewList(cxt.EdgeType()),
+			"out": &graphql.Field{
+				Type: graphql.NewList(cxt.NodeInterface()),
 				Args: graphql.FieldConfigArgument{
 					"name": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
 				},
-				Description: "list of inbound edges",
+				Description: "outbound connected nodes",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					n, ok := p.Source.(*graph.Node)
+					if !ok {
+						return nil, castError("out", p.Source, "Node")
+					}
+					edgeName, _ := p.Args["name"].(string)
+					return n.Out(edgeName).Nodes(), nil
+				},
+			},
+			"in": &graphql.Field{
+				Type: graphql.NewList(cxt.NodeInterface()),
+				Args: graphql.FieldConfigArgument{
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Description: "inbound connected nodes",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
 						return nil, castError("in", p.Source, "Node")
 					}
 					edgeName, _ := p.Args["name"].(string)
-					return n.In(edgeName), nil
+					return n.In(edgeName).Nodes(), nil
 				},
 			},
 		},

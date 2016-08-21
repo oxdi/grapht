@@ -59,6 +59,29 @@ func (n *Node) Attrs() []*Attr {
 	return attrs
 }
 
+func (n *Node) Edges(edgeName string, edgeDir string) Edges {
+	edges := Edges{}
+	for _, e := range n.g.edges {
+		if edgeDir != "" && edgeDir == "out" {
+			if e.from != n.n.id {
+				continue
+			}
+		}
+		if edgeDir != "" && edgeDir == "in" {
+			if e.to != n.n.id {
+				continue
+			}
+		}
+		if edgeName != "" && e.name != edgeName {
+			continue
+		}
+		edges = append(edges, &Edge{
+			e: e,
+			g: n.g,
+		})
+	}
+	return edges
+}
 func (n *Node) Out(edgeName string) Edges {
 	edges := Edges{}
 	for _, e := range n.g.edges {
@@ -76,7 +99,7 @@ func (n *Node) Out(edgeName string) Edges {
 	return edges
 }
 
-func (n *Node) In(edgeName string) []*Edge {
+func (n *Node) In(edgeName string) Edges {
 	edges := Edges{}
 	for _, e := range n.g.edges {
 		if e.to != n.n.id {

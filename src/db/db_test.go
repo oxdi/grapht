@@ -98,15 +98,9 @@ func TestConnection(t *testing.T) {
 			...on User {
 				username
 				friendsViaOut:out(name:"friend") {
-					name
-					node {
+					id
+					friendsViaIn:in(name:"friend") {
 						id
-						friendsViaIn:in(name:"friend") {
-							name
-							node {
-								id
-							}
-						}
 					}
 				}
 			}
@@ -124,19 +118,14 @@ func TestConnection(t *testing.T) {
 	`))
 	dump(c.Query(`
 		aliceFewerFriends:node(id:"alice") {
-			...on User {
-				friends {
+			id
+			edges(name:"friend",dir:"out") {
+				name
+				node {
 					id
-				}
-				out {
-					name
-					node {
-						id
-						in {
-							name
-							node {
-								id
-							}
+					edges(name:"friend",dir:"in") {
+						node {
+							id
 						}
 					}
 				}
