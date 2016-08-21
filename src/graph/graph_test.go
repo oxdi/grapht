@@ -25,8 +25,11 @@ func TestSetNodeAttr(t *testing.T) {
 	g := New()
 	g = g.Set(NodeConfig{
 		ID: "1",
-		Attrs: Attrs{
-			"name": "alice",
+		Attrs: []Attr{
+			Attr{
+				Name:  "name",
+				Value: "alice",
+			},
 		},
 	})
 	expect := testutil.Expect(t)
@@ -37,14 +40,20 @@ func TestSetNodeAttrDoesNotModifyOld(t *testing.T) {
 	g := New()
 	g = g.Set(NodeConfig{
 		ID: "1",
-		Attrs: Attrs{
-			"name": "alice",
+		Attrs: []Attr{
+			Attr{
+				Name:  "name",
+				Value: "alice",
+			},
 		},
 	})
 	_ = g.Set(NodeConfig{
 		ID: "1",
-		Attrs: Attrs{
-			"name": "bob",
+		Attrs: []Attr{
+			Attr{
+				Name:  "name",
+				Value: "bob",
+			},
 		},
 	})
 	expect := testutil.Expect(t)

@@ -3,51 +3,61 @@ package graph
 import "fmt"
 
 type edge struct {
-	name string
-	from string
-	to string
-	attrs map[string]string
-	hasOne bool
+	name     string
+	from     string
+	to       string
+	attrs    map[string]string
+	hasOne   bool
 	onDelete func(e *Edge) *Graph
 }
 
 type Edges []*Edge
 
-func (es Edges) Get(name string) Nodes {
+func (es Edges) Nodes() Nodes {
 	nodes := Nodes{}
 	for _, e := range es {
-		if e.e.name == name {
-			nodes = append(nodes, e.Node())
-		}
+		nodes = append(nodes, e.Node())
 	}
 	return nodes
 }
 
-func (es Edges) First() *Node {
+func (es Edges) First() *Edge {
 	if len(es) == 0 {
 		return nil
 	}
-	return es[0].Node()
+	return es[0]
 }
 
 type Edge struct {
-	g *Graph
-	e *edge
+	g  *Graph
+	e  *edge
 	in bool
 }
 
 func (e *Edge) Node() *Node {
 	if e.in {
-		return e.g.Get(e.e.from)
+		return e.From()
 	}
+	return e.To()
+}
+
+func (e *Edge) To() *Node {
 	return e.g.Get(e.e.to)
 }
 
+func (e *Edge) From() *Node {
+	return e.g.Get(e.e.from)
+}
+
+func (e *Edge) Name() string {
+	return e.e.name
+}
+
 type EdgeConfig struct {
-	Name string
-	From string
-	To string
-	HasOne bool
+	Name     string
+	From     string
+	To       string
+	HasOne   bool
 	OnDelete func(e *Edge) *Graph
 }
 
@@ -64,7 +74,12 @@ func (cfg *EdgeConfig) Validate() error {
 	return nil
 }
 
+type EdgeMatch struct {
+	Name string
+	From string
+	To   string
+}
+
 func Cascade(e *Edge) *Graph {
 	return e.g.Remove(e.e.to)
 }
-

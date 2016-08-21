@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"graph"
 	"sync"
 
@@ -12,10 +13,22 @@ type Conn struct {
 	g   *graph.Graph
 	db  *DB
 	uid string
+	log []string
 	sync.RWMutex
 }
 
-func (c *Conn) Query(query string, params map[string]interface{}) *graphql.Result {
+func (c *Conn) Query(query string) *graphql.Result {
+	query = fmt.Sprintf(`query { %s }`, query)
+	return c.query(query)
+}
+
+func (c *Conn) Exec(query string) *graphql.Result {
+	c.log = append(c.log, query)
+	query = fmt.Sprintf(`mutation { %s }`, query)
+	return c.query(query)
+}
+
+func (c *Conn) query(query string) *graphql.Result {
 	// generate schema for db
 	s, err := NewGraphqlContext(c).Schema()
 	if err != nil {
@@ -27,12 +40,16 @@ func (c *Conn) Query(query string, params map[string]interface{}) *graphql.Resul
 	return graphql.Do(graphql.Params{
 		Schema:         *s,
 		RequestString:  query,
-		VariableValues: params,
+		VariableValues: map[string]interface{}{},
 	})
 }
 
 func (c *Conn) Commit() error {
-	return c.db.commit(c.g)
+	if err := c.db.commit(c.g, c.log, c.uid); err != nil {
+		return err
+	}
+	c.log = []string{}
+	return nil
 }
 
 func (c *Conn) update(g *graph.Graph) error {

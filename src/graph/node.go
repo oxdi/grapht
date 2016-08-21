@@ -10,7 +10,7 @@ type Attrs map[string]string
 type NodeConfig struct {
 	ID    string
 	Type  string
-	Attrs Attrs
+	Attrs []Attr
 }
 
 type Nodes []*Node
@@ -59,10 +59,13 @@ func (n *Node) Attrs() []*Attr {
 	return attrs
 }
 
-func (n *Node) Out() Edges {
+func (n *Node) Out(edgeName string) Edges {
 	edges := Edges{}
 	for _, e := range n.g.edges {
 		if e.from != n.n.id {
+			continue
+		}
+		if edgeName != "" && e.name != edgeName {
 			continue
 		}
 		edges = append(edges, &Edge{
@@ -73,10 +76,13 @@ func (n *Node) Out() Edges {
 	return edges
 }
 
-func (n *Node) In() []*Edge {
+func (n *Node) In(edgeName string) []*Edge {
 	edges := Edges{}
 	for _, e := range n.g.edges {
 		if e.to != n.n.id {
+			continue
+		}
+		if edgeName != "" && e.name != edgeName {
 			continue
 		}
 		edges = append(edges, &Edge{

@@ -1,18 +1,28 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"graph"
+	"reflect"
 
-	"github.com/chrisfarms/inflect"
 	"github.com/graphql-go/graphql"
 )
 
-func castError(src interface{}, dst string) error {
-	return fmt.Errorf("failed to cast %v to %s", src, dst)
+func castError(name string, src interface{}, dst string) error {
+	return fmt.Errorf("failed to cast '%s' arg '%v' to %s", name, reflect.ValueOf(src).Type().Name, dst)
 }
-func invalidArg(name string) error {
-	return fmt.Errorf("invalid argument %s", name)
+func invalidArg(args map[string]interface{}, name string, reason string) error {
+	return fmt.Errorf("argument '%s' (%v) invalid: %s", name, args[name], reason)
+}
+
+// TODO: this is insanely lazy FIXME
+func fill(dst interface{}, src interface{}) error {
+	b, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
 }
 
 func NewGraphqlContext(c *Conn) *GraphqlContext {
@@ -33,6 +43,7 @@ type GraphqlContext struct {
 	fieldDefinitionObject *graphql.Object
 	typeDefinitionObject  *graphql.Object
 	attrObject            *graphql.Object
+	edgeObject            *graphql.Object
 	nodeInterface         *graphql.Interface
 	typeEnum              *graphql.Enum
 	fieldNameEnum         *graphql.Enum
@@ -69,25 +80,25 @@ func (cxt *GraphqlContext) ValueTypeEnum() *graphql.Enum {
 		Name:        "ValueTypeEnum",
 		Description: "type of value held by the field, this determins the type of form field and how data is stored",
 		Values: graphql.EnumValueConfigMap{
-			string(Text): &graphql.EnumValueConfig{
+			string(graph.Text): &graphql.EnumValueConfig{
 				Description: "Generic text field",
 			},
-			string(Int): &graphql.EnumValueConfig{
+			string(graph.Int): &graphql.EnumValueConfig{
 				Description: "Generic int field",
 			},
-			string(Float): &graphql.EnumValueConfig{
+			string(graph.Float): &graphql.EnumValueConfig{
 				Description: "Generic float field",
 			},
-			string(Boolean): &graphql.EnumValueConfig{
+			string(graph.Boolean): &graphql.EnumValueConfig{
 				Description: "Generic bool field",
 			},
-			string(BcryptText): &graphql.EnumValueConfig{
+			string(graph.BcryptText): &graphql.EnumValueConfig{
 				Description: "Text value that gets hashed before write",
 			},
-			string(HasOne): &graphql.EnumValueConfig{
+			string(graph.HasOne): &graphql.EnumValueConfig{
 				Description: "Traditional has-one style relationship to another node",
 			},
-			string(HasMany): &graphql.EnumValueConfig{
+			string(graph.HasMany): &graphql.EnumValueConfig{
 				Description: "Traditional has-many style relationship to other nodes",
 			},
 		},
@@ -108,7 +119,7 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
-						return nil, castError(p.Source, "Attr")
+						return nil, castError("name", p.Source, "Attr")
 					}
 					return attr.Name, nil
 				},
@@ -119,7 +130,7 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
-						return nil, castError(p.Source, "Attr")
+						return nil, castError("value", p.Source, "Attr")
 					}
 					return attr.Value, nil
 				},
@@ -157,6 +168,16 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 					return nil, nil
 				},
 			},
+			"edge": &graphql.Field{
+				Type:        graphql.String,
+				Description: "optional name of edge to follow",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					if fd, ok := p.Source.(*graph.Field); ok {
+						return fd.Edge, nil
+					}
+					return nil, nil
+				},
+			},
 			"name": &graphql.Field{
 				Type:        graphql.NewNonNull(graphql.String),
 				Description: "field name",
@@ -177,37 +198,105 @@ func (cxt *GraphqlContext) NodeInterface() *graphql.Interface {
 	cxt.nodeInterface = graphql.NewInterface(graphql.InterfaceConfig{
 		Name:        "NodeInterface",
 		Description: "Generic node interface",
-		Fields: graphql.Fields{
-			"id": &graphql.Field{
-				Type:        graphql.NewNonNull(graphql.ID),
-				Description: "The id of the node",
-			},
-			"type": &graphql.Field{
-				Type:        graphql.NewNonNull(cxt.TypeObject()),
-				Description: "type definition of node",
-			},
-			"attrs": &graphql.Field{
-				Type:        graphql.NewList(cxt.AttrObject()),
-				Description: "list of node attributes as key/value pairs",
-			},
-		},
+		Fields:      graphql.Fields{},
 		ResolveType: func(p graphql.ResolveTypeParams) *graphql.Object {
-			fmt.Println("types", cxt.types)
 			n, ok := p.Value.(*graph.Node)
 			if !ok {
-				fmt.Println("failed to resolve Node type: Value was not a Node")
-				panic("missing node value")
+				return nil
 			}
 			if n.Type() == nil {
-				fmt.Println("node without type")
-				panic("node found without type")
+				return nil
 			}
-			return cxt.types[n.Type().Name]
+			return cxt.NodeType(n.Type())
 		},
+	})
+	cxt.nodeInterface.AddFieldConfig("id", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.ID),
+		Description: "The id of the node",
+	})
+	cxt.nodeInterface.AddFieldConfig("type", &graphql.Field{
+		Type:        graphql.NewNonNull(cxt.TypeObject()),
+		Description: "type definition of node",
+	})
+	cxt.nodeInterface.AddFieldConfig("attrs", &graphql.Field{
+		Type:        graphql.NewList(cxt.AttrObject()),
+		Description: "list of node attributes as key/value pairs",
+	})
+	cxt.nodeInterface.AddFieldConfig("out", &graphql.Field{
+		Type: graphql.NewList(cxt.EdgeType()),
+		Args: graphql.FieldConfigArgument{
+			"name": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+		},
+		Description: "list of outbound edges",
+	})
+	cxt.nodeInterface.AddFieldConfig("in", &graphql.Field{
+		Type: graphql.NewList(cxt.EdgeType()),
+		Args: graphql.FieldConfigArgument{
+			"name": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+		},
+		Description: "list of inbound edges",
 	})
 	return cxt.nodeInterface
 }
 
+func (cxt *GraphqlContext) EdgeType() *graphql.Object {
+	if cxt.edgeObject != nil {
+		return cxt.edgeObject
+	}
+	cxt.edgeObject = graphql.NewObject(graphql.ObjectConfig{
+		Name:   "Edge",
+		Fields: graphql.Fields{},
+	})
+	cxt.edgeObject.AddFieldConfig("to", &graphql.Field{
+		Type:        graphql.NewNonNull(cxt.NodeInterface()),
+		Description: "destination node",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			e, ok := p.Source.(*graph.Edge)
+			if !ok {
+				return nil, castError("to", p.Source, "Edge")
+			}
+			return e.To(), nil
+		},
+	})
+	cxt.edgeObject.AddFieldConfig("from", &graphql.Field{
+		Type:        graphql.NewNonNull(cxt.NodeInterface()),
+		Description: "source node",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			e, ok := p.Source.(*graph.Edge)
+			if !ok {
+				return nil, castError("from", p.Source, "Edge")
+			}
+			return e.From(), nil
+		},
+	})
+	cxt.edgeObject.AddFieldConfig("node", &graphql.Field{
+		Type:        graphql.NewNonNull(cxt.NodeInterface()),
+		Description: "source node",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			e, ok := p.Source.(*graph.Edge)
+			if !ok {
+				return nil, castError("node", p.Source, "Edge")
+			}
+			return e.Node(), nil
+		},
+	})
+	cxt.edgeObject.AddFieldConfig("name", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "connection name",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			e, ok := p.Source.(*graph.Edge)
+			if !ok {
+				return nil, castError("name", p.Source, "Edge")
+			}
+			return e.Name(), nil
+		},
+	})
+	return cxt.edgeObject
+}
 func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 	if _, exists := cxt.types[t.Name]; exists {
 		return cxt.types[t.Name]
@@ -221,7 +310,7 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
-						return nil, castError(p.Source, "Node")
+						return nil, castError("id", p.Source, "Node")
 					}
 					return n.ID(), nil
 				},
@@ -232,7 +321,7 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
-						return nil, castError(p.Source, "Node")
+						return nil, castError("type", p.Source, "Node")
 					}
 					return n.Type(), nil
 				},
@@ -243,9 +332,43 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
-						return nil, castError(p.Source, "Node")
+						return nil, castError("attrs", p.Source, "Node")
 					}
 					return n.Attrs(), nil
+				},
+			},
+			"out": &graphql.Field{
+				Type: graphql.NewList(cxt.EdgeType()),
+				Args: graphql.FieldConfigArgument{
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Description: "list of outbound edges",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					n, ok := p.Source.(*graph.Node)
+					if !ok {
+						return nil, castError("out", p.Source, "Node")
+					}
+					edgeName, _ := p.Args["name"].(string)
+					return n.Out(edgeName), nil
+				},
+			},
+			"in": &graphql.Field{
+				Type: graphql.NewList(cxt.EdgeType()),
+				Args: graphql.FieldConfigArgument{
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Description: "list of inbound edges",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					n, ok := p.Source.(*graph.Node)
+					if !ok {
+						return nil, castError("in", p.Source, "Node")
+					}
+					edgeName, _ := p.Args["name"].(string)
+					return n.In(edgeName), nil
 				},
 			},
 		},
@@ -261,35 +384,19 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 	return o
 }
 
-const (
-	Text       = "Text"
-	BcryptText = "BcryptText"
-	Int        = "Int"
-	Float      = "Float"
-	Boolean    = "Boolean"
-	HasOne     = "HasOne"
-	HasMany    = "HasMany"
-)
-
 func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 	switch fd.Type {
-	case Text, BcryptText:
+	case graph.Text, graph.BcryptText:
 		return graphql.String
-	case Int:
+	case graph.Int:
 		return graphql.Int
-	case Float:
+	case graph.Float:
 		return graphql.Float
-	case Boolean:
+	case graph.Boolean:
 		return graphql.Boolean
-	case HasOne:
-		if fd.ToType != nil {
-			return cxt.NodeType(fd.ToType)
-		}
+	case graph.HasOne:
 		return cxt.NodeInterface()
-	case HasMany:
-		if fd.ToType != nil {
-			return graphql.NewList(cxt.NodeType(fd.ToType))
-		}
+	case graph.HasMany:
 		return graphql.NewList(cxt.NodeInterface())
 	default:
 		panic(fmt.Sprintf("unknown ValueType '%s'", fd.Type))
@@ -298,31 +405,31 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 
 func (cxt *GraphqlContext) ArgType(fd *graph.Field) graphql.Output {
 	switch fd.Type {
-	case HasOne:
+	case graph.HasOne:
 		return graphql.String
-	case HasMany:
+	case graph.HasMany:
 		return graphql.NewList(graphql.String)
 	default:
 		return cxt.ValueType(fd)
 	}
 }
 
-func (cxt *GraphqlContext) Field(fd *graph.Field) *graphql.Field {
+func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 	return &graphql.Field{
-		Type:        cxt.ValueType(fd),
-		Description: fd.Description,
+		Type:        cxt.ValueType(f),
+		Description: f.Description,
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			n, ok := p.Source.(*graph.Node)
 			if !ok {
-				return nil, fmt.Errorf("failed to get field %s invalid node source: %v", fd.Name, p.Source)
+				return nil, fmt.Errorf("failed to get field %s invalid node source: %v", f.Name, p.Source)
 			}
-			switch fd.Type {
-			case HasOne:
-				return n.Out().Get(fd.Name).First(), nil
-			case HasMany:
-				return n.Out().Get(fd.Name), nil
+			switch f.Type {
+			case graph.HasOne:
+				return n.Out("").Nodes().First(), nil
+			case graph.HasMany:
+				return n.Out("").Nodes(), nil
 			default:
-				return n.Attr(fd.Name), nil
+				return n.Attr(f.Name), nil
 			}
 		},
 	}
@@ -377,21 +484,50 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 				Type: graphql.NewNonNull(graphql.String),
 			},
 			"fields": &graphql.ArgumentConfig{
-				Type: graphql.NewList(cxt.FieldDefinitionObject()),
+				Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
+					Name: "FieldArg",
+					Fields: graphql.InputObjectConfigFieldMap{
+						"name": &graphql.InputObjectFieldConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+						"type": &graphql.InputObjectFieldConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+						"edge": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+					},
+				})),
 			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			name, ok := p.Args["name"].(string)
-			if !ok || name == "" {
-				return nil, fmt.Errorf("invalid name")
+			args := struct {
+				Name   string
+				Fields []struct {
+					Name string
+					Type string
+					Edge string
+				}
+			}{}
+			if err := fill(&args, p.Args); err != nil {
+				return nil, err
 			}
-			// cn := &DefineType{
-			// 	Name: name,
-			// }
-			// if err := cxt.db.Apply(cxt.user.ID, cn); err != nil {
-			// 	return nil, err
-			// }
-			return cxt.conn.g.Type(name), nil
+			t := &graph.Type{Name: args.Name}
+			for _, fa := range args.Fields {
+				t.Fields = append(t.Fields, &graph.Field{
+					Name: fa.Name,
+					Type: fa.Type,
+					Edge: fa.Edge,
+				})
+			}
+			g := cxt.conn.g
+			g = g.DefineType(*t)
+			t = g.Type(args.Name)
+			if t == nil {
+				return nil, fmt.Errorf("failed to create type")
+			}
+			cxt.conn.update(g)
+			return t, nil
 		},
 	}
 }
@@ -455,110 +591,149 @@ func (cxt *GraphqlContext) GetTypes() *graphql.Field {
 	}
 }
 
-func (cxt *GraphqlContext) DefineFieldMutation() *graphql.Field {
+func (cxt *GraphqlContext) DisconnectMutation() *graphql.Field {
 	return &graphql.Field{
-		Description: "Create a new field for a type",
-		Type:        cxt.FieldDefinitionObject(),
+		Description: "set node data",
+		Type:        graphql.NewList(cxt.EdgeType()),
 		Args: graphql.FieldConfigArgument{
-			"type": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
-			},
-			"valueType": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
-			},
 			"name": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
+				Type: graphql.String,
 			},
-			"toType": &graphql.ArgumentConfig{
+			"from": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+			"to": &graphql.ArgumentConfig{
 				Type: graphql.String,
 			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			return nil, nil // TODO!
+			match := graph.EdgeMatch{}
+			err := fill(&match, p.Args)
+			if err != nil {
+				return nil, err
+			}
+			g := cxt.conn.g
+			edges := g.Edges(match)
+			g = g.Disconnect(match)
+			cxt.conn.update(g)
+			return edges, nil
 		},
 	}
 }
-
-func (cxt *GraphqlContext) SetMutation() *graphql.Field {
-	argFields := graphql.FieldConfigArgument{
-		"id": &graphql.ArgumentConfig{
-			Type: graphql.NewNonNull(graphql.String),
+func (cxt *GraphqlContext) ConnectMutation() *graphql.Field {
+	return &graphql.Field{
+		Description: "set node data",
+		Type:        cxt.EdgeType(),
+		Args: graphql.FieldConfigArgument{
+			"name": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"from": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"to": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"hasOne": &graphql.ArgumentConfig{
+				Type: graphql.Boolean,
+			},
 		},
-		"type": &graphql.ArgumentConfig{
-			Type: graphql.NewNonNull(graphql.String),
-		},
-		"attrs": &graphql.ArgumentConfig{
-			Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
-				Name: "AttrArg",
-				Fields: graphql.InputObjectConfigFieldMap{
-					"name": &graphql.InputObjectFieldConfig{
-						Type: graphql.String,
-					},
-					"value": &graphql.InputObjectFieldConfig{
-						Type: graphql.String,
-					},
-				},
-			})),
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			cfg := graph.EdgeConfig{}
+			err := fill(&cfg, p.Args)
+			if err != nil {
+				return nil, err
+			}
+			g := cxt.conn.g
+			from := g.Get(cfg.From)
+			if from == nil {
+				return nil, fmt.Errorf("from node '%s' did not exist", cfg.From)
+			}
+			to := g.Get(cfg.To)
+			if to == nil {
+				return nil, fmt.Errorf("to node '%s' did not exist", cfg.To)
+			}
+			if cfg.Name == "" {
+				return nil, fmt.Errorf("connection name cannot be blank")
+			}
+			g = g.Connect(cfg)
+			edge := g.Edges(graph.EdgeMatch{
+				From: cfg.From,
+				To:   cfg.To,
+				Name: cfg.Name,
+			}).First()
+			if edge == nil {
+				return nil, fmt.Errorf("failed to create edge")
+			}
+			cxt.conn.update(g)
+			return edge, nil
 		},
 	}
+}
+func (cxt *GraphqlContext) RemoveMutation() *graphql.Field {
+	return &graphql.Field{
+		Description: "delete a node",
+		Type:        cxt.NodeInterface(),
+		Args: graphql.FieldConfigArgument{
+			"id": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			cfg := graph.NodeConfig{}
+			err := fill(&cfg, p.Args)
+			if err != nil {
+				return nil, err
+			}
+			g := cxt.conn.g
+			n := g.Get(cfg.ID)
+			if n == nil {
+				return nil, fmt.Errorf("node already removed")
+			}
+			g = g.Remove(cfg.ID)
+			cxt.conn.update(g)
+			return n, nil
+		},
+	}
+}
+func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 	return &graphql.Field{
 		Description: "set node data",
 		Type:        cxt.NodeInterface(),
-		Args:        argFields,
+		Args: graphql.FieldConfigArgument{
+			"id": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"type": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"attrs": &graphql.ArgumentConfig{
+				Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
+					Name: "AttrArg",
+					Fields: graphql.InputObjectConfigFieldMap{
+						"name": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+						"value": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+					},
+				})),
+			},
+		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			cfg := graph.NodeConfig{}
+			err := fill(&cfg, p.Args)
+			if err != nil {
+				return nil, err
+			}
 			g := cxt.conn.g
-			id, ok := p.Args["id"].(string)
-			if !ok {
-				return nil, invalidArg("id")
-			}
-			if id == "" {
-				return nil, invalidArg("id")
-			}
-			typeName, ok := p.Args["type"].(string)
-			if !ok {
-				return nil, invalidArg("type")
-			}
-			if typeName == "" {
-				return nil, invalidArg("type")
-			}
-			t := g.Type(typeName)
-			if t == nil {
-				return nil, invalidArg("type")
-			}
-			fmt.Println("args", p.Args)
-			iattrs, ok := p.Args["attrs"].([]interface{})
-			if !ok {
-				return nil, invalidArg("attrs")
-			}
-			attrs := graph.Attrs{}
-			for _, iv := range iattrs {
-				args, ok := iv.(map[string]interface{})
-				if !ok {
-					return nil, invalidArg("attrs[i]")
-				}
-				k, ok := args["name"].(string)
-				if !ok {
-					return nil, invalidArg("attrs[i].name")
-				}
-				if k == "" {
-					return nil, fmt.Errorf("k is empty")
-				}
-				v, ok := args["value"].(string)
-				if !ok {
-					return nil, invalidArg("attrs[i].value")
-				}
-				attrs[k] = v
-			}
-			g = g.Set(graph.NodeConfig{
-				ID:    id,
-				Type:  t.Name,
-				Attrs: attrs,
-			})
-			n := g.Get(id)
+			g = g.Set(cfg)
+			n := g.Get(cfg.ID)
 			if n == nil {
 				return nil, fmt.Errorf("failed to create node")
 			}
-			cxt.conn.g = g
+			cxt.conn.update(g)
 			return n, nil
 		},
 	}
@@ -573,7 +748,7 @@ func (cxt *GraphqlContext) AddMutation(name string, field *graphql.Field) {
 }
 
 func (cxt *GraphqlContext) schema() (*graphql.Schema, error) {
-	s, err := graphql.NewSchema(graphql.SchemaConfig{
+	cfg := graphql.SchemaConfig{
 		Query: graphql.NewObject(graphql.ObjectConfig{
 			Name:   "RootQuery",
 			Fields: cxt.fields,
@@ -582,7 +757,12 @@ func (cxt *GraphqlContext) schema() (*graphql.Schema, error) {
 			Name:   "RootMutation",
 			Fields: cxt.mutations,
 		}),
-	})
+		Types: []graphql.Type{},
+	}
+	for _, t := range cxt.conn.g.Types() {
+		cfg.Types = append(cfg.Types, cxt.NodeType(t))
+	}
+	s, err := graphql.NewSchema(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -590,14 +770,16 @@ func (cxt *GraphqlContext) schema() (*graphql.Schema, error) {
 }
 
 func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
+	// for _, t := range cxt.conn.g.Types() {
+	// 	cxt.AddQuery(inflect.CamelizeDownFirst(inflect.Pluralize(t.Name)), cxt.NodeListField(t))
+	// }
 	cxt.AddQuery("node", cxt.NodeField(nil))
 	cxt.AddQuery("nodes", cxt.NodeListField(nil))
-	for _, t := range cxt.conn.g.Types() {
-		fmt.Println("t", t.Name)
-		cxt.AddQuery(inflect.CamelizeDownFirst(inflect.Pluralize(t.Name)), cxt.NodeListField(t))
-	}
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddMutation("defineType", cxt.DefineTypeMutation())
 	cxt.AddMutation("set", cxt.SetMutation())
+	cxt.AddMutation("connect", cxt.ConnectMutation())
+	cxt.AddMutation("disconnect", cxt.DisconnectMutation())
+	cxt.AddMutation("remove", cxt.RemoveMutation())
 	return cxt.schema()
 }

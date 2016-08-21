@@ -1,5 +1,7 @@
 package graph
 
+import "fmt"
+
 var DefaultValidator = func(n *Node) {
 
 }
@@ -36,8 +38,8 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 		t:     v.Type,
 		attrs: Attrs{},
 	}
-	for k, v := range v.Attrs {
-		n.attrs[k] = v
+	for _, v := range v.Attrs {
+		n.attrs[v.Name] = v.Value
 	}
 	g2.nodes = append(g.nodes, n)
 	return g2
@@ -52,12 +54,12 @@ func (g *Graph) Remove(id string) *Graph {
 		}
 		g2.nodes = append(g2.nodes, n)
 	}
-	g2 = g2.Disconnect(EdgeConfig{From: id})
-	g2 = g2.Disconnect(EdgeConfig{To: id})
+	g2 = g2.Disconnect(EdgeMatch{From: id})
+	g2 = g2.Disconnect(EdgeMatch{To: id})
 	return g2
 }
 
-func (g *Graph) Disconnect(cfg EdgeConfig) *Graph {
+func (g *Graph) Disconnect(cfg EdgeMatch) *Graph {
 	g2 := g.clone()
 	g2.edges = []*edge{}
 	removed := []*edge{}
@@ -99,6 +101,15 @@ func (g *Graph) Connect(cfg EdgeConfig) *Graph {
 
 		}
 	}
+	if cfg.Name == "" {
+		panic(fmt.Sprintf("name cannot be blank"))
+	}
+	if g.Get(cfg.From) == nil {
+		panic(fmt.Sprintf("from node '%s' does not exist", cfg.From))
+	}
+	if g.Get(cfg.To) == nil {
+		panic(fmt.Sprintf("from node '%s' does not exist", cfg.To))
+	}
 	// check for dup
 	g2.edges = append(g2.edges, &edge{
 		from:     cfg.From,
@@ -132,7 +143,25 @@ func (g *Graph) Get(id string) *Node {
 }
 
 func (g *Graph) DefineType(t Type) *Graph {
+	if t.Name == "" {
+		panic("cannot create type with blank name")
+	}
+	for _, f := range t.Fields {
+		if f.Name == "" {
+			panic("cannot create field with blank name")
+		}
+		if (f.Type == HasOne || f.Type == HasMany) && (f.Edge == "") {
+			panic("edge name required for HasOne,HasMany field types")
+		}
+	}
 	g2 := g.clone()
+	g2.types = []*Type{}
+	for _, tt := range g.types {
+		if tt.Name == t.Name {
+			continue
+		}
+		g2.types = append(g2.types, tt)
+	}
 	g2.types = append(g2.types, &t)
 	return g2
 }
@@ -159,6 +188,22 @@ func (g *Graph) Nodes() Nodes {
 		})
 	}
 	return ns
+}
+
+func (g *Graph) Edges(m EdgeMatch) Edges {
+	es := Edges{}
+	for _, e := range g.edges {
+		if (m.Name != "" && m.Name != e.name) ||
+			(m.From != "" && m.From != e.from) ||
+			(m.To != "" && m.To != e.to) {
+			continue
+		}
+		es = append(es, &Edge{
+			e: e,
+			g: g,
+		})
+	}
+	return es
 }
 
 func New() *Graph {
