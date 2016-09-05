@@ -59,6 +59,8 @@ func (db *DB) closeConnection(conn *Conn) error {
 }
 
 func (db *DB) NewConnection(uid string) *Conn {
+	db.RLock()
+	defer db.RUnlock()
 	c := &Conn{
 		db:  db,
 		g:   db.g,

@@ -19,16 +19,26 @@ type Conn struct {
 
 func (c *Conn) Query(query string) *graphql.Result {
 	query = fmt.Sprintf(`query { %s }`, query)
-	return c.query(query)
+	return c.query(query, nil)
+}
+
+func (c *Conn) QueryWithParams(query string, params map[string]interface{}) *graphql.Result {
+	query = fmt.Sprintf(`query { %s }`, query)
+	return c.query(query, params)
 }
 
 func (c *Conn) Exec(query string) *graphql.Result {
 	c.log = append(c.log, query)
 	query = fmt.Sprintf(`mutation { %s }`, query)
-	return c.query(query)
+	return c.query(query, nil)
 }
 
-func (c *Conn) query(query string) *graphql.Result {
+func (c *Conn) ExecWithParams(query string, params map[string]interface{}) *graphql.Result {
+	query = fmt.Sprintf(`mutation { %s }`, query)
+	return c.query(query, params)
+}
+
+func (c *Conn) query(query string, params map[string]interface{}) *graphql.Result {
 	// generate schema for db
 	s, err := NewGraphqlContext(c).Schema()
 	if err != nil {
@@ -40,7 +50,7 @@ func (c *Conn) query(query string) *graphql.Result {
 	return graphql.Do(graphql.Params{
 		Schema:         *s,
 		RequestString:  query,
-		VariableValues: map[string]interface{}{},
+		VariableValues: params,
 	})
 }
 
