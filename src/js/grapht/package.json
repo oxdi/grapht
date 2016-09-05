@@ -1,0 +1,14 @@
+{
+  "name": "grapht",
+  "version": "1.0.0",
+  "description": "grapht client",
+  "main": "index.js",
+  "scripts": {
+    "test": "tap test/*_test.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tap": "^6.3.2"
+  }
+}
