@@ -11,7 +11,7 @@ function Connection(cfg){
 	this.n = 0;
 }
 
-Connection.prototype.connect = function(query,args){
+Connection.prototype._connect = function(query,args){
 	var conn = this;
 	if( !conn.connected ){
 		conn.connected = new Promise(function(resolve, reject){
@@ -84,7 +84,7 @@ Connection.prototype.onMessage = function(json){
 
 Connection.prototype.send = function(msg){
 	var conn = this;
-	return this.connect().then(function(){
+	return this._connect().then(function(){
 		return conn._send(msg);
 	})
 }
@@ -220,6 +220,29 @@ Connection.prototype.remove = function(args, returning){
 	})
 	.then(function(data){
 		return data.node;
+	});
+}
+
+Connection.prototype.connect = function(args, returning){
+	var conn = this;
+	if( !returning ){
+		returning = `id`;
+	}
+	return conn.mutation({
+		input: {
+			to: 'String!',
+			from: 'String!',
+			name: 'String!',
+		},
+		query: `
+			edge:connect(${conn.toPlaceholders(args)}) {
+				${returning}
+			}
+		`,
+		params: args
+	})
+	.then(function(data){
+		return data.edge;
 	});
 }
 

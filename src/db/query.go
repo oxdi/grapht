@@ -161,8 +161,8 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 				Description: "optional type of target nodes",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					if fd, ok := p.Source.(*graph.Field); ok {
-						if fd.ToType != nil {
-							return fd.ToType.Name, nil
+						if fd.ToType != "" {
+							return fd.ToType, nil
 						}
 					}
 					return nil, nil
@@ -428,8 +428,20 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 	case graph.Boolean:
 		return graphql.Boolean
 	case graph.HasOne:
+		if fd.ToType != "" {
+			t := cxt.conn.g.Type(fd.ToType)
+			if t != nil {
+				return cxt.NodeType(t)
+			}
+		}
 		return cxt.NodeInterface()
 	case graph.HasMany:
+		if fd.ToType != "" {
+			t := cxt.conn.g.Type(fd.ToType)
+			if t != nil {
+				return graphql.NewList(cxt.NodeType(t))
+			}
+		}
 		return graphql.NewList(cxt.NodeInterface())
 	default:
 		panic(fmt.Sprintf("unknown ValueType '%s'", fd.Type))
@@ -529,6 +541,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"edge": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
+						"toType": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
 					},
 				})),
 			},
@@ -537,9 +552,10 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			args := struct {
 				Name   string
 				Fields []struct {
-					Name string
-					Type string
-					Edge string
+					Name   string
+					Type   string
+					Edge   string
+					ToType string
 				}
 			}{}
 			if err := fill(&args, p.Args); err != nil {
@@ -548,9 +564,10 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			t := &graph.Type{Name: args.Name}
 			for _, fa := range args.Fields {
 				t.Fields = append(t.Fields, &graph.Field{
-					Name: fa.Name,
-					Type: fa.Type,
-					Edge: fa.Edge,
+					Name:   fa.Name,
+					Type:   fa.Type,
+					Edge:   fa.Edge,
+					ToType: fa.ToType,
 				})
 			}
 			g := cxt.conn.g
@@ -771,6 +788,23 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				return nil, err
 			}
 			g := cxt.conn.g
+			t := g.Type(cfg.Type)
+			if t == nil {
+				return nil, fmt.Errorf("type %s is not defined", cfg.Type)
+			}
+			fieldExists := func(name string) bool {
+				for _, field := range t.Fields {
+					if field.Name == name {
+						return true
+					}
+				}
+				return false
+			}
+			for _, attr := range cfg.Attrs {
+				if !fieldExists(attr.Name) {
+					return nil, fmt.Errorf("cannot set attr %s type %s does not define a field called %s", attr.Name, t.Name, attr.Name)
+				}
+			}
 			g = g.Set(cfg)
 			n := g.Get(cfg.ID)
 			if n == nil {

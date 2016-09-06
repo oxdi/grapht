@@ -47,7 +47,7 @@ t.test('create a blog engine', function(t){
 				fields:[
 					{name:"title",type:"Text"},
 					{name:"body",type:"Text"},
-					{name:"author", type:"HasOne",edge:"author"}
+					{name:"author", type:"HasOne",edge:"author",toType:"Author"}
 				]
 			},`
 				name
@@ -55,15 +55,16 @@ t.test('create a blog engine', function(t){
 					name
 					type
 					edge
+					toType
 				}
 			`)
 			.then(function(res){
 				return t.same(res, {
 					name: "Post",
 					fields: [
-						{name: "title", type:"Text", edge:null},
-						{name: "body", type:"Text", edge:null},
-						{name: "author", type:"HasOne", edge:"author"}
+						{name: "title", type:"Text", edge:null, toType:null},
+						{name: "body", type:"Text", edge:null, toType:null},
+						{name: "author", type:"HasOne", edge:"author",toType:"Author"}
 					]
 				})
 			})
@@ -89,7 +90,7 @@ t.test('create a blog engine', function(t){
 				id:"alice",
 				type:"Author",
 				attrs: [
-					{name:"username",value:"alice1"}
+					{name:"name",value:"alice alison"}
 				]
 			},`
 				id
@@ -112,7 +113,7 @@ t.test('create a blog engine', function(t){
 				id:"bob",
 				type:"Author",
 				attrs: [
-					{name:"name",value:"bob1"}
+					{name:"name",value:"bobby bobbington"}
 				]
 			})
 			.then(function(res){
@@ -146,7 +147,28 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("create an Cheese tag", function(t){
+		test("connect alice to cheese-post as author", function(t){
+			return conn.connect({
+				from: "cheese-post",
+				to: "alice",
+				name: "author"
+			},`
+				from {
+					id
+				}
+				to {
+					id
+				}
+			`)
+			.then(function(res){
+				return t.same(res, {
+					from: {id: "cheese-post"},
+					to: {id: "alice"}
+				})
+			})
+		});
+
+		test("create a Cheese tag", function(t){
 			return conn.set({
 				id:"cheese-tag",
 				type:"Tag",
@@ -170,6 +192,34 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
+		test("fetch cheese-post", function(t){
+			return conn.query(`
+				post:node(id:"cheese-post") {
+					id
+					...on Post {
+						title
+						body
+						author {
+							id
+							name
+						}
+					}
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {
+					post: {
+						id: "cheese-post",
+						title: "about cheese",
+						body: "cheese comes from the moon",
+						author: {
+							id: "alice",
+							name: "alice alison"
+						}
+					}
+				})
+			})
+		});
 
 		test("list all nodes", function(t){
 			return conn.query(`
@@ -200,6 +250,22 @@ t.test('create a blog engine', function(t){
 					nodes: [
 						{id: "alice"},
 						{id: "bob"},
+					]
+				})
+			})
+		});
+
+		test("filter nodes by multiple types", function(t){
+			return conn.query(`
+				nodes(type:[Post,Tag]) {
+					id
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {
+					nodes: [
+						{id: "cheese-post"},
+						{id: "cheese-tag"},
 					]
 				})
 			})

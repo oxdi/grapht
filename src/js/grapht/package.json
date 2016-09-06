@@ -4,7 +4,7 @@
   "description": "grapht client",
   "main": "index.js",
   "scripts": {
-    "test": "tap test/*_test.js"
+    "test": "tap test/*_test.js -b"
   },
   "author": "",
   "license": "ISC",
