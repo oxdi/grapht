@@ -22,6 +22,25 @@ func (ns Nodes) First() *Node {
 	return ns[0]
 }
 
+func (ns Nodes) FilterType(types ...string) Nodes {
+	if len(types) == 0 {
+		return ns
+	}
+	if len(ns) == 0 {
+		return ns
+	}
+	ns2 := Nodes{}
+	for _, n := range ns {
+		for _, t := range types {
+			if n.n.t == t {
+				ns2 = append(ns2, n)
+				break
+			}
+		}
+	}
+	return ns2
+}
+
 type node struct {
 	id    string
 	attrs map[string]string

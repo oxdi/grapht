@@ -584,7 +584,17 @@ func (cxt *GraphqlContext) NodeListField(t *graph.Type) *graphql.Field {
 		Description: "list all nodes",
 		Type:        graphql.NewList(gqlType),
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			return cxt.conn.g.Nodes(), nil
+			args := struct {
+				Type []string
+				Sort []string
+			}{}
+			if err := fill(&args, p.Args); err != nil {
+				return nil, err
+			}
+			ns := cxt.conn.g.Nodes()
+			ns = ns.FilterType(args.Type...)
+			// ns = ns.Sort(args.Sort)
+			return ns, nil
 		},
 	}
 }

@@ -157,8 +157,11 @@ Connection.prototype.toPlaceholders = function(args){
 	return placeholders.join(', ');
 }
 
-Connection.prototype.defineType = function(args){
+Connection.prototype.defineType = function(args, returning){
 	var conn = this;
+	if( !returning ){
+		returning = `name`;
+	}
 	return conn.mutation({
 		input: {
 			name: 'String!',
@@ -166,7 +169,7 @@ Connection.prototype.defineType = function(args){
 		},
 		query: `
 			type:defineType(${conn.toPlaceholders(args)}) {
-				name
+				${returning}
 			}
 		`,
 		params: args
@@ -176,8 +179,11 @@ Connection.prototype.defineType = function(args){
 	});
 }
 
-Connection.prototype.set = function(args){
+Connection.prototype.set = function(args, returning){
 	var conn = this;
+	if( !returning ){
+		returning = `id`;
+	}
 	return conn.mutation({
 		input: {
 			id: 'String!',
@@ -186,10 +192,28 @@ Connection.prototype.set = function(args){
 		},
 		query: `
 			node:set(${conn.toPlaceholders(args)}) {
-				id
-				type {
-					name
-				}
+				${returning}
+			}
+		`,
+		params: args
+	})
+	.then(function(data){
+		return data.node;
+	});
+}
+
+Connection.prototype.remove = function(args, returning){
+	var conn = this;
+	if( !returning ){
+		returning = `id`;
+	}
+	return conn.mutation({
+		input: {
+			id: 'String!',
+		},
+		query: `
+			node:remove(${conn.toPlaceholders(args)}) {
+				${returning}
 			}
 		`,
 		params: args
