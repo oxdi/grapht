@@ -1,9 +1,9 @@
 package db
 
 import (
-	"fmt"
 	"graph"
 	"sync"
+	"time"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/gqlerrors"
@@ -13,28 +13,29 @@ type Conn struct {
 	g   *graph.Graph
 	db  *DB
 	uid string
-	log []string
+	log []*M
 	sync.RWMutex
 }
 
 func (c *Conn) Query(query string) *graphql.Result {
-	query = fmt.Sprintf(`query { %s }`, query)
-	return c.query(query, nil)
+	return c.QueryWithParams(query, nil)
 }
 
 func (c *Conn) QueryWithParams(query string, params map[string]interface{}) *graphql.Result {
-	query = fmt.Sprintf(`query { %s }`, query)
 	return c.query(query, params)
 }
 
 func (c *Conn) Exec(query string) *graphql.Result {
-	c.log = append(c.log, query)
-	query = fmt.Sprintf(`mutation { %s }`, query)
-	return c.query(query, nil)
+	return c.ExecWithParams(query, nil)
 }
 
 func (c *Conn) ExecWithParams(query string, params map[string]interface{}) *graphql.Result {
-	query = fmt.Sprintf(`mutation { %s }`, query)
+	c.log = append(c.log, &M{
+		T: time.Now(),
+		Q: query,
+		U: c.uid,
+		P: params,
+	})
 	return c.query(query, params)
 }
 
@@ -55,10 +56,10 @@ func (c *Conn) query(query string, params map[string]interface{}) *graphql.Resul
 }
 
 func (c *Conn) Commit() error {
-	if err := c.db.commit(c.g, c.log, c.uid); err != nil {
+	if err := c.db.commit(c.g, c.log); err != nil {
 		return err
 	}
-	c.log = []string{}
+	c.log = []*M{}
 	return nil
 }
 

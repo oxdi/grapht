@@ -1,8 +1,14 @@
 var spawn = require('child_process').spawn;
+var fs = require('fs');
+var cwd = '../../../';
+var dataDir = cwd+'data/';
 
 module.exports.run = function(fn){
+	var appID = 'jstest';
+	var testDB = dataDir+appID;
+	fs.writeFileSync(testDB, '');
 	var proc = spawn('./bin/grapht',{
-		cwd: '../../../'
+		cwd: cwd
 	});
 	var started = false;
 
@@ -25,10 +31,11 @@ module.exports.run = function(fn){
 
 	return serving.then(function(){
 		console.log('running fn()');
-		return fn();
+		return fn({appID: appID});
 	}).then(function(){
 		console.log('killing');
 		proc.kill();
+		fs.unlinkSync(testDB);
 	});
 
 }

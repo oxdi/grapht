@@ -23,17 +23,13 @@ type DB struct {
 	log   io.ReadWriter
 }
 
-func (db *DB) commit(g *graph.Graph, mutations []string, uid string) error {
+func (db *DB) commit(g *graph.Graph, mutations []*M) error {
 	db.Lock()
 	defer db.Unlock()
 	db.g = g
 	enc := json.NewEncoder(db.log)
 	for _, m := range mutations {
-		err := enc.Encode(&M{
-			T: time.Now(),
-			Q: m,
-			U: uid,
-		})
+		err := enc.Encode(m)
 		if err != nil {
 			return err
 		}

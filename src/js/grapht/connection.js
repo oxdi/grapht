@@ -3,6 +3,7 @@ const QUERY = "query";
 const EXEC = "exec";
 const LOGIN = "login";
 const ERROR = "error";
+const COMMIT = "commit";
 
 function Connection(cfg){
 	this.cfg = cfg;
@@ -57,7 +58,7 @@ Connection.prototype.authenticate = function(){
 		type: LOGIN,
 		username: "",
 		password: "",
-		appID: "jstest"
+		appID: conn.cfg.appID
 	}).then(function(msg){
 		conn.token = msg.token;
 		console.log('authenticated', conn.token);
@@ -109,29 +110,104 @@ Connection.prototype._send = function(msg){
 }
 
 Connection.prototype.query = function(query,args){
+	return this.do(QUERY, `query { ${query} }`, args);
+}
+
+Connection.prototype.mutation = function(args){
+	var name = 'M';
+	if( args.params ){
+		var types = [];
+		for( var k in args.params ){
+			var typedef = args.input[k];
+			if( !typedef ){
+				throw new Error('invalid argument to mutation: no typedef');
+			}
+			types.push(`$${k}: ${typedef}`);
+		}
+		name = `M(${types.join(',')})`;
+	}
+	return this.do(EXEC, `mutation ${name} { ${args.query} }`, args.params);
+}
+
+Connection.prototype.do = function(kind, query,args){
 	var conn = this;
 	return conn.authenticate().then(function(){
-		console.log('querying...');
+		console.log('performing do('+kind+','+query+','+JSON.stringify(args||{}));
 		return conn.send({
-			type:QUERY,
+			type:kind,
 			query:query,
 			params:args || {},
+		}).then(function(msg){
+			if( !msg.data ){
+				return Promise.reject(new Error('no result data'));
+			}
+			if( msg.data.errors && msg.data.errors.length > 0 ){
+				return Promise.reject(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
+			}
+			return msg.data.data;
 		});
 	});
 }
 
-Connection.prototype.exec = function(query,args){
+Connection.prototype.toPlaceholders = function(args){
+	var placeholders = [];
+	for( var k in args ){
+		placeholders.push(`${k}: $${k}`);
+	}
+	return placeholders.join(', ');
+}
+
+Connection.prototype.defineType = function(args){
 	var conn = this;
-	return conn.authenticate().then(function(){
-		console.log('execing...');
-		return conn.send({
-			type:EXEC,
-			query:query,
-			params:args || {},
-		}).then(function(msg){
-			return msg.data.data;
-		});
+	return conn.mutation({
+		input: {
+			name: 'String!',
+			fields: '[FieldArg]'
+		},
+		query: `
+			type:defineType(${conn.toPlaceholders(args)}) {
+				name
+			}
+		`,
+		params: args
+	})
+	.then(function(data){
+		return data.type;
 	});
+}
+
+Connection.prototype.set = function(args){
+	var conn = this;
+	return conn.mutation({
+		input: {
+			id: 'String!',
+			type: 'String!',
+			attrs: '[AttrArg]'
+		},
+		query: `
+			node:set(${conn.toPlaceholders(args)}) {
+				id
+				type {
+					name
+				}
+			}
+		`,
+		params: args
+	})
+	.then(function(data){
+		return data.node;
+	});
+}
+
+Connection.prototype.commit = function(){
+	var conn = this;
+	return conn.send({
+		type: COMMIT,
+	}).then(function(msg){
+		if( msg.type != 'ok' ){
+			return Promise.reject(new Error('expected ok got:'+JSON.stringify(msg)));
+		}
+	})
 }
 
 module.exports = Connection;

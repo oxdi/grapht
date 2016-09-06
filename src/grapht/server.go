@@ -142,6 +142,7 @@ func recv(c *conn, msg *WireMsg) error {
 		}
 	case "query":
 		c.RLock()
+		defer c.RUnlock()
 		if c.db == nil {
 			return fmt.Errorf("cannot query: not connected")
 		}
@@ -151,12 +152,12 @@ func recv(c *conn, msg *WireMsg) error {
 			Type: "data",
 			Data: result,
 		})
-		c.RUnlock()
 		if err != nil {
 			return err
 		}
 	case "exec":
 		c.RLock()
+		defer c.RUnlock()
 		if c.db == nil {
 			return fmt.Errorf("cannot exec: not connected")
 		}
@@ -166,7 +167,23 @@ func recv(c *conn, msg *WireMsg) error {
 			Type: "data",
 			Data: result,
 		})
-		c.RUnlock()
+		if err != nil {
+			return err
+		}
+	case "commit":
+		c.RLock()
+		defer c.RUnlock()
+		if c.db == nil {
+			return fmt.Errorf("cannot commit: not connected")
+		}
+		err := c.db.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit: %s", err.Error())
+		}
+		err = send(c.ws, &WireMsg{
+			Tag:  msg.Tag,
+			Type: "ok",
+		})
 		if err != nil {
 			return err
 		}

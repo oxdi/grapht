@@ -28,103 +28,93 @@ func TestConnection(t *testing.T) {
 	c := db.NewConnection("")
 	defer c.Close()
 	dump(c.Exec(`
-		defineType(name: "User", fields:[
-			{name:"username",type:"Text"},
-			{name:"friends",type:"HasMany",edge:"friend"}
-		]) {
-			name
+		mutation {
+			defineType(name: "User", fields:[
+				{name:"username",type:"Text"},
+				{name:"friends",type:"HasMany",edge:"friend"}
+			]) {
+				name
+			}
 		}
 	`))
 	dump(c.Exec(`
-		alice:set(id:"alice",type:"User",attrs:[{name:"username",value:"alice1"}]) {
-			id
-			type {
-				name
-				fields {
+		mutation {
+			alice:set(id:"alice",type:"User",attrs:[{name:"username",value:"alice1"}]) {
+				id
+				type {
 					name
-					type
-					edge
-				}
-			}
-			attrs {
-				name
-				value
-			}
-		}
-	`))
-	dump(c.Exec(`
-		bob:set(id:"bob",type:"User",attrs:[{name:"username",value:"bob1"}]) {
-			id
-		}
-	`))
-	dump(c.Exec(`
-		jeff:set(id:"jeff",type:"User",attrs:[{name:"username",value:"jeff1"}]) {
-			id
-		}
-	`))
-	dump(c.Exec(`
-		connect(from:"alice",to:"bob",name:"friend"){
-			from {
-				id
-			}
-			to {
-				id
-			}
-		}
-	`))
-	dump(c.Exec(`
-		connect(from:"alice",to:"jeff",name:"friend"){
-			from {
-				id
-			}
-			to {
-				id
-			}
-		}
-	`))
-	dump(c.Exec(`
-		connect(from:"alice",to:"jeff",name:"like"){
-			name
-			from {
-				id
-			}
-			to {
-				id
-			}
-		}
-	`))
-	dump(c.Query(`
-		aliceWithFriends:node(id:"alice") {
-			...on User {
-				username
-				friendsViaOut:out(name:"friend") {
-					id
-					friendsViaIn:in(name:"friend") {
-						id
+					fields {
+						name
+						type
+						edge
 					}
 				}
+				attrs {
+					name
+					value
+				}
 			}
 		}
 	`))
 	dump(c.Exec(`
-		disconnect(from:"alice",to:"bob",name:"friend"){
-			from {
-				id
-			}
-			to {
+		mutation {
+			bob:set(id:"bob",type:"User",attrs:[{name:"username",value:"bob1"}]) {
 				id
 			}
 		}
 	`))
-	dump(c.Query(`
-		aliceFewerFriends:node(id:"alice") {
-			id
-			edges(name:"friend",dir:"out") {
-				name
-				node {
+	dump(c.Exec(`
+		mutation {
+			jeff:set(id:"jeff",type:"User",attrs:[{name:"username",value:"jeff1"}]) {
+				id
+			}
+		}
+	`))
+	dump(c.Exec(`
+		mutation {
+			connect(from:"alice",to:"bob",name:"friend"){
+				from {
 					id
-					edges(name:"friend",dir:"in") {
-						node {
+				}
+				to {
+					id
+				}
+			}
+		}
+	`))
+	dump(c.Exec(`
+		mutation {
+			connect(from:"alice",to:"jeff",name:"friend"){
+				from {
+					id
+				}
+				to {
+					id
+				}
+			}
+		}
+	`))
+	dump(c.Exec(`
+		mutation {
+			connect(from:"alice",to:"jeff",name:"like"){
+				name
+				from {
+					id
+				}
+				to {
+					id
+				}
+			}
+		}
+	`))
+	dump(c.Query(`
+		query {
+			aliceWithFriends:node(id:"alice") {
+				...on User {
+					username
+					friendsViaOut:out(name:"friend") {
+						id
+						friendsViaIn:in(name:"friend") {
 							id
 						}
 					}
@@ -133,31 +123,69 @@ func TestConnection(t *testing.T) {
 		}
 	`))
 	dump(c.Exec(`
-		remove(id:"jeff") {
-			id
-		}
-	`))
-	dump(c.Query(`
-		aliceNoFriends:node(id:"alice") {
-			...on User {
-				friends {
+		mutation {
+			disconnect(from:"alice",to:"bob",name:"friend"){
+				from {
+					id
+				}
+				to {
 					id
 				}
 			}
 		}
 	`))
 	dump(c.Query(`
-		users:nodes(type:[User]) {
-			...on User {
-				username
+		query {
+			aliceFewerFriends:node(id:"alice") {
+				id
+				edges(name:"friend",dir:"out") {
+					name
+					node {
+						id
+						edges(name:"friend",dir:"in") {
+							node {
+								id
+							}
+						}
+					}
+				}
+			}
+		}
+	`))
+	dump(c.Exec(`
+		mutation {
+			remove(id:"jeff") {
+				id
+			}
+		}
+	`))
+	dump(c.Query(`
+		query {
+			aliceNoFriends:node(id:"alice") {
+				...on User {
+					friends {
+						id
+					}
+				}
+			}
+		}
+	`))
+	dump(c.Query(`
+		query {
+			users:nodes(type:[User]) {
+				...on User {
+					username
+				}
 			}
 		}
 	`))
 	c2 := db.NewConnection("")
 	defer c2.Close()
 	dump(c2.Query(`
-		c2NodeShouldBeNull:node(id:"alice") {
-			id
+		query {
+			c2NodeShouldBeNull:node(id:"alice") {
+				id
+			}
 		}
 	`))
 	if err := c.Commit(); err != nil {
@@ -166,8 +194,10 @@ func TestConnection(t *testing.T) {
 	c2 = db.NewConnection("")
 	defer c2.Close()
 	dump(c2.Query(`
-		c2NodeShouldNowBeOK:node(id:"alice") {
-			id
+		query {
+			c2NodeShouldNowBeOK:node(id:"alice") {
+				id
+			}
 		}
 	`))
 	db2, err := New(&buf)
@@ -176,11 +206,13 @@ func TestConnection(t *testing.T) {
 	}
 	c2 = db2.NewConnection("")
 	dump(c2.Query(`
-		replayedUser:node(id:"alice") {
-			...on User {
-				id
-				friends {
+		query {
+			replayedUser:node(id:"alice") {
+				...on User {
 					id
+					friends {
+						id
+					}
 				}
 			}
 		}
@@ -196,36 +228,19 @@ func TestOpen(t *testing.T) {
 	}
 	c := db.NewConnection("")
 	dump(c.Exec(`
-		defineType(name: "User", fields:[
-			{name:"username",type:"Text"}
-		]) {
-			name
-		}
-	`))
-	dump(c.Exec(`
-		alice:set(id:"alice",type:"User",attrs:[{name:"username",value:"alice1"}]) {
-			id
-		}
-	`))
-	if err := c.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	db, err = Open(testFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c = db.NewConnection("")
-	dump(c.Query(`
-		users:nodes(type:[User]) {
-			...on User {
-				username
+		mutation mutantA {
+			defineType(name: "User", fields:[
+				{name:"username",type:"Text"}
+			]) {
+				name
 			}
 		}
 	`))
 	dump(c.Exec(`
-		bob:set(id:"bob",type:"User",attrs:[{name:"username",value:"bob1"}]) {
-			id
+		mutation mutantB {
+			alice:set(id:"alice",type:"User",attrs:[{name:"username",value:"alice1"}]) {
+				id
+			}
 		}
 	`))
 	if err := c.Commit(); err != nil {
@@ -238,9 +253,36 @@ func TestOpen(t *testing.T) {
 	}
 	c = db.NewConnection("")
 	dump(c.Query(`
-		users:nodes(type:[User]) {
-			...on User {
-				username
+		query {
+			users:nodes(type:[User]) {
+				...on User {
+					username
+				}
+			}
+		}
+	`))
+	dump(c.Exec(`
+		mutation {
+			bob:set(id:"bob",type:"User",attrs:[{name:"username",value:"bob1"}]) {
+				id
+			}
+		}
+	`))
+	if err := c.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	db, err = Open(testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c = db.NewConnection("")
+	dump(c.Query(`
+		query {
+			users:nodes(type:[User]) {
+				...on User {
+					username
+				}
 			}
 		}
 	`))
