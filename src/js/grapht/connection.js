@@ -157,7 +157,7 @@ Connection.prototype.toPlaceholders = function(args){
 	return placeholders.join(', ');
 }
 
-Connection.prototype.defineType = function(args, returning){
+Connection.prototype.setType = function(args, returning){
 	var conn = this;
 	if( !returning ){
 		returning = `name`;
@@ -179,7 +179,7 @@ Connection.prototype.defineType = function(args, returning){
 	});
 }
 
-Connection.prototype.set = function(args, returning){
+Connection.prototype.setNode = function(args, returning){
 	var conn = this;
 	if( !returning ){
 		returning = `id`;
@@ -202,7 +202,7 @@ Connection.prototype.set = function(args, returning){
 	});
 }
 
-Connection.prototype.remove = function(args, returning){
+Connection.prototype.removeNodes = function(args, returning){
 	var conn = this;
 	if( !returning ){
 		returning = `id`;
@@ -223,10 +223,14 @@ Connection.prototype.remove = function(args, returning){
 	});
 }
 
-Connection.prototype.connect = function(args, returning){
+Connection.prototype.setEdge = function(args, returning){
 	var conn = this;
 	if( !returning ){
-		returning = `id`;
+		returning = `
+			from {id}
+			to {id}
+			name
+		`;
 	}
 	return conn.mutation({
 		input: {
@@ -243,6 +247,33 @@ Connection.prototype.connect = function(args, returning){
 	})
 	.then(function(data){
 		return data.edge;
+	});
+}
+
+Connection.prototype.removeEdges = function(args, returning){
+	var conn = this;
+	if( !returning ){
+		returning = `
+			from {id}
+			to {id}
+			name
+		`;
+	}
+	return conn.mutation({
+		input: {
+			to: 'String!',
+			from: 'String!',
+			name: 'String!',
+		},
+		query: `
+			edges:disconnect(${conn.toPlaceholders(args)}) {
+				${returning}
+			}
+		`,
+		params: args
+	})
+	.then(function(data){
+		return data.edges;
 	});
 }
 

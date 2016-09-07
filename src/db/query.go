@@ -694,9 +694,6 @@ func (cxt *GraphqlContext) ConnectMutation() *graphql.Field {
 			"to": &graphql.ArgumentConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
-			"hasOne": &graphql.ArgumentConfig{
-				Type: graphql.Boolean,
-			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			cfg := graph.EdgeConfig{}

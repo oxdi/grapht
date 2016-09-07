@@ -86,20 +86,10 @@ func (g *Graph) Connect(cfg EdgeConfig) *Graph {
 	if err := cfg.Validate(); err != nil {
 		panic(err)
 	}
-	if cfg.HasOne {
-		g2.edges = []*edge{}
-		for _, e := range g.edges {
-			if e.name == cfg.Name && e.from == cfg.From {
-				continue
-			}
-			g2.edges = append(g2.edges, e)
-		}
-	} else {
-		g2.edges = g.edges
-		if i := g2.indexOfDupConnection(cfg); i != -1 {
-			g2.edges = append(g2.edges[:i], g2.edges[i+1:]...)
+	g2.edges = g.edges
+	if i := g2.indexOfDupConnection(cfg); i != -1 {
+		g2.edges = append(g2.edges[:i], g2.edges[i+1:]...)
 
-		}
 	}
 	if cfg.Name == "" {
 		panic(fmt.Sprintf("name cannot be blank"))
@@ -115,7 +105,6 @@ func (g *Graph) Connect(cfg EdgeConfig) *Graph {
 		from:     cfg.From,
 		to:       cfg.To,
 		name:     cfg.Name,
-		hasOne:   cfg.HasOne,
 		onDelete: cfg.OnDelete,
 	})
 	return g2

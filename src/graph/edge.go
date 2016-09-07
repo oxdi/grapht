@@ -7,7 +7,6 @@ type edge struct {
 	from     string
 	to       string
 	attrs    map[string]string
-	hasOne   bool
 	onDelete func(e *Edge) *Graph
 }
 
@@ -57,7 +56,6 @@ type EdgeConfig struct {
 	Name     string
 	From     string
 	To       string
-	HasOne   bool
 	OnDelete func(e *Edge) *Graph
 }
 

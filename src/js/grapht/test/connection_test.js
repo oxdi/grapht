@@ -19,35 +19,39 @@ t.test('create a blog engine', function(t){
 		}
 
 		test("create an Author type", function(t){
-			return conn.defineType({
+			return conn.setType({
 				name:"Author",
 				fields:[
-					{name:"name",type:"Text"}
+					{name:"name",type:"Text"},
+					{name:"posts",type:"HasMany",edge:"author", toType:"Post"}
 				]
 			}, `
 				name
 				fields {
 					name
 					type
+					toType
 				}
 			`)
 			.then(function(res){
 				return t.same(res, {
 					name: "Author",
 					fields: [
-						{name: "name", type:"Text"}
+						{name: "name", type:"Text", toType:null},
+						{name: "posts", type:"HasMany", toType:"Post"}
 					]
 				})
 			})
 		});
 
 		test("create a Post type", function(t){
-			return conn.defineType({
+			return conn.setType({
 				name:"Post",
 				fields:[
 					{name:"title",type:"Text"},
 					{name:"body",type:"Text"},
-					{name:"author", type:"HasOne",edge:"author",toType:"Author"}
+					{name:"author", type:"HasOne", edge:"author", toType:"Author"},
+					{name:"tags", type:"HasMany", edge:"tagged", toType:"Tag"}
 				]
 			},`
 				name
@@ -64,14 +68,16 @@ t.test('create a blog engine', function(t){
 					fields: [
 						{name: "title", type:"Text", edge:null, toType:null},
 						{name: "body", type:"Text", edge:null, toType:null},
-						{name: "author", type:"HasOne", edge:"author",toType:"Author"}
+						{name: "author", type:"HasOne", edge:"author",toType:"Author"},
+						{name: "tags", type:"HasMany", edge:"tagged",toType:"Tag"},
+
 					]
 				})
 			})
 		});
 
 		test("create a Tag type", function(t){
-			return conn.defineType({
+			return conn.setType({
 				name:"Tag",
 				fields:[
 					{name:"name",type:"Text"},
@@ -86,7 +92,7 @@ t.test('create a blog engine', function(t){
 		});
 
 		test("create an Author node called alice", function(t){
-			return conn.set({
+			return conn.setNode({
 				id:"alice",
 				type:"Author",
 				attrs: [
@@ -109,7 +115,7 @@ t.test('create a blog engine', function(t){
 		});
 
 		test("create an Author node called bob", function(t){
-			return conn.set({
+			return conn.setNode({
 				id:"bob",
 				type:"Author",
 				attrs: [
@@ -123,13 +129,13 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("create an Post about cheese", function(t){
-			return conn.set({
-				id:"cheese-post",
+		test("create an Post about cheddar", function(t){
+			return conn.setNode({
+				id:"cheddar-post",
 				type:"Post",
 				attrs: [
-					{name:"title",value:"about cheese"},
-					{name:"body",value:"cheese comes from the moon"},
+					{name:"title",value:"about cheddar"},
+					{name:"body",value:"cheddar comes from the moon"},
 				]
 			},`
 				id
@@ -139,7 +145,7 @@ t.test('create a blog engine', function(t){
 			`)
 			.then(function(res){
 				return t.same(res, {
-					id: "cheese-post",
+					id: "cheddar-post",
 					type: {
 						name: "Post"
 					}
@@ -147,29 +153,68 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("connect alice to cheese-post as author", function(t){
-			return conn.connect({
-				from: "cheese-post",
+		test("create an Post about stilton", function(t){
+			return conn.setNode({
+				id:"stilton-post",
+				type:"Post",
+				attrs: [
+					{name:"title",value:"about stilton"},
+					{name:"body",value:"stilton is the bluest of cheeses"},
+				]
+			},`
+				id
+			`)
+			.then(function(res){
+				return t.same(res, {
+					id: "stilton-post",
+				})
+			})
+		});
+
+		test("connect alice to cheddar-post as author", function(t){
+			return conn.setEdge({
+				from: "cheddar-post",
+				to: "alice",
+				name: "author"
+			})
+			.then(function(res){
+				return t.same(res, {
+					from: {id: "cheddar-post"},
+					to: {id: "alice"},
+					name: "author"
+				})
+			})
+		});
+
+		test("connect alice to stilton-post as author", function(t){
+			return conn.setEdge({
+				from: "stilton-post",
 				to: "alice",
 				name: "author"
 			},`
 				from {
-					id
+					...on Post {
+						title
+					}
 				}
 				to {
-					id
+					...on Author {
+						name
+					}
 				}
+				name
 			`)
 			.then(function(res){
 				return t.same(res, {
-					from: {id: "cheese-post"},
-					to: {id: "alice"}
+					from: {title: "about stilton"},
+					to: {name: "alice alison"},
+					name: "author"
 				})
 			})
 		});
 
 		test("create a Cheese tag", function(t){
-			return conn.set({
+			return conn.setNode({
 				id:"cheese-tag",
 				type:"Tag",
 				attrs: [
@@ -192,9 +237,9 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("fetch cheese-post", function(t){
+		test("fetch cheddar-post with author", function(t){
 			return conn.query(`
-				post:node(id:"cheese-post") {
+				post:node(id:"cheddar-post") {
 					id
 					...on Post {
 						title
@@ -209,13 +254,36 @@ t.test('create a blog engine', function(t){
 			.then(function(data){
 				return t.same(data, {
 					post: {
-						id: "cheese-post",
-						title: "about cheese",
-						body: "cheese comes from the moon",
+						id: "cheddar-post",
+						title: "about cheddar",
+						body: "cheddar comes from the moon",
 						author: {
 							id: "alice",
 							name: "alice alison"
 						}
+					}
+				})
+			})
+		});
+
+		test("fetch alice's posts (reverse of HasOne)", function(t){
+			return conn.query(`
+				alice:node(id:"alice") {
+					posts:in(name:"author") {
+						...on Post {
+							id
+							title
+						}
+					}
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {
+					alice: {
+						posts: [
+							{id:"cheddar-post", title:"about cheddar"},
+							{id:"stilton-post", title:"about stilton"}
+						]
 					}
 				})
 			})
@@ -232,7 +300,8 @@ t.test('create a blog engine', function(t){
 					nodes: [
 						{id: "alice"},
 						{id: "bob"},
-						{id: "cheese-post"},
+						{id: "cheddar-post"},
+						{id: "stilton-post"},
 						{id: "cheese-tag"},
 					]
 				})
@@ -264,15 +333,33 @@ t.test('create a blog engine', function(t){
 			.then(function(data){
 				return t.same(data, {
 					nodes: [
-						{id: "cheese-post"},
+						{id: "cheddar-post"},
+						{id: "stilton-post"},
 						{id: "cheese-tag"},
 					]
 				})
 			})
 		});
 
+		test("disconnect alice as author of cheddar-post", function(t){
+			return conn.removeEdges({
+				from: "cheddar-post",
+				to: "alice",
+				name: "author"
+			})
+			.then(function(res){
+				return t.same(res, [
+						{
+							to: {id: "alice"},
+							from: {id:"cheddar-post"},
+							name: "author"
+						}
+				])
+			})
+		})
+
 		test("remove Author Alice", function(t){
-			return conn.remove({
+			return conn.removeNodes({
 				id:"alice",
 			})
 			.then(function(res){
