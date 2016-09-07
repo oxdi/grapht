@@ -245,8 +245,10 @@ t.test('create a blog engine', function(t){
 						title
 						body
 						author {
-							id
-							name
+							...on Author {
+								id
+								name
+							}
 						}
 					}
 				}
@@ -357,6 +359,21 @@ t.test('create a blog engine', function(t){
 				])
 			})
 		})
+
+		test("check alice not author of cheddar-post anymore ", function(t){
+			return conn.query(`
+				node(id:"cheddar-post") {
+					...on Post {
+						author {
+							id
+						}
+					}
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {node:{author:null}})
+			})
+		});
 
 		test("remove Author Alice", function(t){
 			return conn.removeNodes({

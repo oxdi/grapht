@@ -15,6 +15,24 @@ func castError(name string, src interface{}, dst string) error {
 func invalidArg(args map[string]interface{}, name string, reason string) error {
 	return fmt.Errorf("argument '%s' (%v) invalid: %s", name, args[name], reason)
 }
+func nilSourceError(fieldName, typeName string) error {
+	return fmt.Errorf("error fetching field '%s' for '%s': required source was nil", fieldName, typeName)
+}
+
+var reservedWords = []string{
+	"node",
+	"nodes",
+	"attr",
+	"attrs",
+	"in",
+	"out",
+	"edge",
+	"edges",
+	"null",
+	"nullnode",
+	"hasone",
+	"id",
+}
 
 // TODO: this is insanely lazy FIXME
 func fill(dst interface{}, src interface{}) error {
@@ -204,6 +222,9 @@ func (cxt *GraphqlContext) NodeInterface() *graphql.Interface {
 			if !ok {
 				return nil
 			}
+			if n == nil {
+				return nil
+			}
 			if n.Type() == nil {
 				return nil
 			}
@@ -309,6 +330,7 @@ func (cxt *GraphqlContext) EdgeType() *graphql.Object {
 	})
 	return cxt.edgeObject
 }
+
 func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 	if _, exists := cxt.types[t.Name]; exists {
 		return cxt.types[t.Name]
@@ -324,6 +346,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					if !ok {
 						return nil, castError("id", p.Source, "Node")
 					}
+					if n == nil {
+						return "", nilSourceError("id", t.Name)
+					}
 					return n.ID(), nil
 				},
 			},
@@ -335,6 +360,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					if !ok {
 						return nil, castError("type", p.Source, "Node")
 					}
+					if n == nil {
+						return nil, nilSourceError("type", t.Name)
+					}
 					return n.Type(), nil
 				},
 			},
@@ -345,6 +373,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
 						return nil, castError("attrs", p.Source, "Node")
+					}
+					if n == nil {
+						return nil, nilSourceError("attrs", t.Name)
 					}
 					return n.Attrs(), nil
 				},
@@ -365,6 +396,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					if !ok {
 						return nil, castError("out", p.Source, "Node")
 					}
+					if n == nil {
+						return nil, nilSourceError("edges", t.Name)
+					}
 					edgeName, _ := p.Args["name"].(string)
 					edgeDir, _ := p.Args["dir"].(string)
 					return n.Edges(edgeName, edgeDir), nil
@@ -383,6 +417,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					if !ok {
 						return nil, castError("out", p.Source, "Node")
 					}
+					if n == nil {
+						return nil, nilSourceError("out", t.Name)
+					}
 					edgeName, _ := p.Args["name"].(string)
 					return n.Out(edgeName).Nodes(), nil
 				},
@@ -399,6 +436,9 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
 						return nil, castError("in", p.Source, "Node")
+					}
+					if n == nil {
+						return nil, nilSourceError("in", t.Name)
 					}
 					edgeName, _ := p.Args["name"].(string)
 					return n.In(edgeName).Nodes(), nil
@@ -468,11 +508,18 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 			if !ok {
 				return nil, fmt.Errorf("failed to get field %s invalid node source: %v", f.Name, p.Source)
 			}
+			if n == nil {
+				return nil, nilSourceError(f.Name, "<unknown>")
+			}
 			switch f.Type {
 			case graph.HasOne:
-				return n.Out("").Nodes().First(), nil
+				node := n.Out(f.Edge).Nodes().First()
+				if node == nil {
+					return nil, nil
+				}
+				return node, nil
 			case graph.HasMany:
-				return n.Out("").Nodes(), nil
+				return n.In(f.Edge).Nodes(), nil
 			default:
 				return n.Attr(f.Name), nil
 			}
