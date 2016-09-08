@@ -34,7 +34,17 @@ Query.prototype._onData = function(msg){
 }
 
 Query.prototype.unsubscribe = function(){
-	this.onUnsubscribe();
+	var query = this;
+	var conn = this.cfg.conn;
+	return conn.send({
+		type:"unsubscribe",
+		tag: this.cfg.tag,
+	}).then(function(msg){
+		query.onUnsubscribe();
+		this.ready = Promise.reject(new Error('not subscribed'));
+	}).catch(function(err){
+		query.onError(err);
+	});
 }
 
 Query.prototype.subscribe = function(){
@@ -50,6 +60,13 @@ Query.prototype.subscribe = function(){
 	}).catch(function(err){
 		query.onError(err);
 	});
+}
+
+Query.prototype.set = function(query,params){
+	this.cfg.query = query;
+	this.cfg.params = params || {};
+	this.ready = this.subscribe();
+	return this.ready;
 }
 
 module.exports = Query;
