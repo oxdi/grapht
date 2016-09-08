@@ -411,6 +411,49 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
+		test("conn2 should be unaffected so far", function(t){
+			return conn2.query(`
+				nodes {
+					id
+				}
+				types {
+					name
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {nodes:[],types:[]})
+			})
+		});
+
+		test("commit changes", function(t){
+			return conn.commit()
+		});
+
+
+		test("conn2 should now reflect all changes", function(t){
+			return conn2.query(`
+				nodes {
+					id
+				}
+				types {
+					name
+				}
+			`)
+			.then(function(data){
+				return t.same(data, {
+					nodes:[
+						{id:"bob"},
+						{id:"cheddar-post"},
+						{id:"stilton-post"},
+						{id:"cheese-tag"},
+					],
+					types:[
+						{name:"Author"},
+						{name:"Post"},
+						{name:"Tag"},
+					]})
+			})
+		});
 
 
 		test("subscribed query should update after setNode", function(t){
@@ -456,9 +499,62 @@ t.test('create a blog engine', function(t){
 					resolve(Promise.reject(new Error(err)))
 				});
 				query.on('unsubscribe', function(){
+					t.equal(state.dataCount, 2);
 					resolve(true);
 				});
 			})
+		})
+
+		test("subscription should update on conn2.commit", function(t){
+			return new Promise(function(resolve){
+				var state = {dataCount: 0};
+				var query = conn.subscribe(`
+					nodes(type:Tag){
+						...on Tag {
+							name
+						}
+					}
+				`);
+				query.on('data', function(data){
+					state.dataCount++;
+					switch(state.dataCount){
+					case 1:
+						t.same(data, {
+							nodes: [
+								{name: "CHEESEY"}
+							]
+						});
+						conn2.setNode({
+							id: "cheese-tag",
+							type: "Tag",
+							attrs: [
+								{name:"name", value:"cheese"}
+							]
+						}).then(function(){
+							return conn2.commit();
+						}).catch(t.threw)
+						break;
+					case 2:
+						t.same(data, {
+							nodes: [
+								{name: "cheese"}
+							]
+						});
+						query.unsubscribe();
+						break;
+					default:
+						resolve(Promise.reject(new Error('received more data than expected')))
+					}
+				});
+				query.on('error', function(err){
+					t.equal(state.dataCount, 2);
+					resolve(Promise.reject(new Error(err)))
+				});
+				query.on('unsubscribe', function(){
+					resolve(true);
+				});
+			})
+
 		})
 
 
