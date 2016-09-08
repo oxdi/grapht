@@ -123,8 +123,11 @@ Connection.prototype._send = function(msg){
 	});
 }
 
-Connection.prototype.query = function(query,args){
-	return this.do(QUERY, `query { ${query} }`, args);
+Connection.prototype.query = function(query,params){
+	if( !(/^\s*query\s/.test(query)) ){
+		query = `query { ${query} }`;
+	}
+	return this.do(QUERY, query, params);
 }
 
 Connection.prototype.subscribe = function(query,args){
@@ -139,20 +142,29 @@ Connection.prototype.subscribe = function(query,args){
 	return query;
 }
 
-Connection.prototype.mutation = function(args){
-	var name = 'M';
-	if( args.params ){
+Connection.prototype.buildQuery = function(kind, name, query, paramTypes, params){
+	var definition = name;
+	if( params ){
 		var types = [];
-		for( var k in args.params ){
-			var typedef = args.input[k];
-			if( !typedef ){
-				throw new Error('invalid argument to mutation: no typedef');
+		for( var k in params ){
+			var paramType = paramTypes[k];
+			if( !paramType ){
+				if( typeof params[k] == 'string' ){
+					paramType = 'String!';
+				} else {
+					throw new Error('invalid param: no paramType given');
+				}
 			}
-			types.push(`$${k}: ${typedef}`);
+			types.push(`$${k}: ${paramType}`);
 		}
-		name = `M(${types.join(',')})`;
+		definition = `${name}(${types.join(',')})`;
 	}
-	return this.do(EXEC, `mutation ${name} { ${args.query} }`, args.params);
+	return `${kind} ${definition} { ${query} }`;
+}
+
+Connection.prototype.mutation = function(args){
+	var q = this.buildQuery("mutation", "M", args.query, args.input, args.params);
+	return this.do(EXEC, q, args.params);
 }
 
 Connection.prototype.do = function(kind, query,args){

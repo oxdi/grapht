@@ -342,6 +342,25 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
+		test("filter nodes by single type using variable", function(t){
+			return conn.query(`
+				query Q($kind:[TypeEnum]) {
+					nodes(type:$kind) {
+						id
+					}
+				}
+			`,{
+				kind: "Author"
+			}).then(function(data){
+				return t.same(data, {
+					nodes: [
+						{id: "alice"},
+						{id: "bob"},
+					]
+				})
+			})
+		});
+
 		test("filter nodes by multiple types", function(t){
 			return conn.query(`
 				nodes(type:[Post,Tag]) {
