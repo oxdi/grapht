@@ -26,7 +26,6 @@ type DB struct {
 func (db *DB) commit(g *graph.Graph, mutations []*M) error {
 	db.Lock()
 	defer db.Unlock()
-	db.g = g
 	enc := json.NewEncoder(db.log)
 	for _, m := range mutations {
 		err := enc.Encode(m)
@@ -34,6 +33,7 @@ func (db *DB) commit(g *graph.Graph, mutations []*M) error {
 			return err
 		}
 	}
+	db.g = g
 	for _, c := range db.conns {
 		c.update(db.g)
 	}
@@ -66,6 +66,14 @@ func (db *DB) NewConnection(uid string) *Conn {
 	return c
 }
 
+func (db *DB) apply(m *M) error {
+	c := db.NewConnection(m.U)
+	defer c.Close()
+	c.ExecWithParams(m.Q, m.P) //TODO: handle result errors
+	db.g = c.g
+	return nil
+}
+
 // replay reads each log entry, decodes it and applies it
 func (db *DB) replay() error {
 	dec := json.NewDecoder(db.log)
@@ -76,10 +84,10 @@ func (db *DB) replay() error {
 		} else if err != nil {
 			return err
 		}
-		c := db.NewConnection(m.U)
-		c.Exec(m.Q)
-		db.g = c.g
-		c.Close()
+		err := db.apply(&m)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -95,6 +95,7 @@ type conn struct {
 	db  *db.Conn
 	ws  *websocket.Conn
 	sync.RWMutex
+	subscriptions map[string]func()
 }
 
 func recv(c *conn, msg *WireMsg) error {
@@ -107,6 +108,11 @@ func recv(c *conn, msg *WireMsg) error {
 		c.Lock()
 		c.uid = uid
 		c.db = db.NewConnection(uid)
+		c.db.OnChange = func() {
+			for _, fn := range c.subscriptions {
+				fn()
+			}
+		}
 		c.Unlock()
 		err = send(c.ws, &WireMsg{
 			Tag:   msg.Tag,
@@ -127,6 +133,11 @@ func recv(c *conn, msg *WireMsg) error {
 				return fmt.Errorf("no app found for aid claim")
 			}
 			c.db = db.NewConnection(c.uid)
+			c.db.OnChange = func() {
+				for _, fn := range c.subscriptions {
+					fn()
+				}
+			}
 			err = send(c.ws, &WireMsg{
 				Tag:   msg.Tag,
 				Type:  "token",
@@ -187,6 +198,54 @@ func recv(c *conn, msg *WireMsg) error {
 		if err != nil {
 			return err
 		}
+	case "subscribe":
+		c.Lock()
+		defer c.Unlock()
+		if c.db == nil {
+			return fmt.Errorf("cannot query: not connected")
+		}
+		c.subscriptions[msg.Tag] = func() {
+			result := c.db.QueryWithParams(msg.Query, msg.Params)
+			err := send(c.ws, &WireMsg{
+				Tag:  msg.Tag,
+				Type: "data",
+				Data: result,
+			})
+			if err != nil {
+				senderr := send(c.ws, &WireMsg{
+					Tag:   msg.Tag,
+					Type:  "error",
+					Error: err.Error(),
+				})
+				if senderr != nil {
+					fmt.Println("SENDERR", senderr)
+				}
+			}
+		}
+		err := send(c.ws, &WireMsg{
+			Tag:  msg.Tag,
+			Type: "ok",
+		})
+		if err != nil {
+			return err
+		}
+		c.db.OnChange()
+	case "unsubscribe":
+		c.Lock()
+		defer c.Unlock()
+		if c.db == nil {
+			return fmt.Errorf("cannot query: not connected")
+		}
+		delete(c.subscriptions, msg.Tag)
+		err := send(c.ws, &WireMsg{
+			Tag:  msg.Tag,
+			Type: "ok",
+		})
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown message type: %s", msg.Type)
 	}
 	return nil
 }
@@ -204,7 +263,10 @@ func send(ws *websocket.Conn, msg *WireMsg) error {
 
 func connect() websocket.Handler {
 	return websocket.Handler(func(ws *websocket.Conn) {
-		c := &conn{ws: ws}
+		c := &conn{
+			ws:            ws,
+			subscriptions: map[string]func(){},
+		}
 		defer func() {
 			if c.db != nil {
 				// c.db.Close()

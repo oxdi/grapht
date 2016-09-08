@@ -15,6 +15,7 @@ type Conn struct {
 	uid string
 	log []*M
 	sync.RWMutex
+	OnChange func()
 }
 
 func (c *Conn) Query(query string) *graphql.Result {
@@ -36,7 +37,8 @@ func (c *Conn) ExecWithParams(query string, params map[string]interface{}) *grap
 		U: c.uid,
 		P: params,
 	})
-	return c.query(query, params)
+	result := c.query(query, params)
+	return result
 }
 
 func (c *Conn) query(query string, params map[string]interface{}) *graphql.Result {
@@ -59,14 +61,28 @@ func (c *Conn) Commit() error {
 	if err := c.db.commit(c.g, c.log); err != nil {
 		return err
 	}
-	c.log = []*M{}
 	return nil
 }
 
+// update is called when the parent db is updated
+// it resets the base graph and reapplies any pending mutations
+// if it fails then the pending mutations are no longer valid (for instance
+// maybe someone else changed the type system making the pending mutations fail)
+//
 func (c *Conn) update(g *graph.Graph) error {
 	c.Lock()
 	defer c.Unlock()
 	c.g = g
+	c.log = []*M{}
+	// for _, m := range c.log {
+	// 	err := c.ExecWithParams(m.Q, m.P)
+	// 	if err != nil {
+	// 		fmt.Println("cannot apply pending mutations after update:", m, err)
+	// 	}
+	// }
+	if c.OnChange != nil {
+		c.OnChange()
+	}
 	return nil
 }
 

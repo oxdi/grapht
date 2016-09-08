@@ -1,13 +1,17 @@
 const WebSocket = require('ws');
+const Query = require('./query');
 const QUERY = "query";
 const EXEC = "exec";
 const LOGIN = "login";
 const ERROR = "error";
 const COMMIT = "commit";
+const DATA = "data";
+const SUBSCRIBE = "subscribe";
 
 function Connection(cfg){
 	this.cfg = cfg;
-	this.tags = {};
+	this.promises = {};
+	this.subscriptions = {};
 	this.n = 0;
 }
 
@@ -68,17 +72,27 @@ Connection.prototype.authenticate = function(){
 
 Connection.prototype.onMessage = function(json){
 	var msg = JSON.parse(json);
-	console.log('onMessage', msg);
-	var handler = this.tags[msg.tag];
-	if( handler ){
+	if( this.promises[msg.tag] ){
+		console.log('onMessage -> promise', json);
+		var handler = this.promises[msg.tag];
 		if( msg.type == ERROR ){
 			handler(Promise.reject(new Error(msg.error)));
 		} else {
 			handler(msg);
 		}
-		delete this.tags[msg.tag];
+		delete this.promises[msg.tag];
+	} else if( this.subscriptions[msg.tag] ){
+		console.log('onMessage -> subscription', json);
+		var query = this.subscriptions[msg.tag];
+		if( msg.type == ERROR ){
+			query.onError(msg.error);
+		} else if( msg.type == DATA ){
+			query._onData(msg);
+		} else {
+			throw new Error('query subscription cannot handle msg type:'+msg.type);
+		}
 	} else {
-		console.log('invalid msg tag', msg, msg['tag'], this.tags);
+		console.log('onMessage -> Unhandled msg tag', json);
 	}
 }
 
@@ -93,9 +107,9 @@ Connection.prototype._send = function(msg){
 	var conn = this;
 	return new Promise(function(resolve, reject){
 		try {
-			var tag = ++conn.n;
-			msg.tag = tag.toString();
-			conn.tags[msg.tag] = resolve;
+			conn.n++;
+			msg.tag = msg.tag || (conn.n).toString();
+			conn.promises[msg.tag] = resolve;
 			var data = JSON.stringify(msg);
 			console.log('sending', data);
 			conn.ws.send(data, function ack(err){
@@ -111,6 +125,18 @@ Connection.prototype._send = function(msg){
 
 Connection.prototype.query = function(query,args){
 	return this.do(QUERY, `query { ${query} }`, args);
+}
+
+Connection.prototype.subscribe = function(query,args){
+	var id = ++this.n;
+	var query = new Query({
+		tag: id.toString(),
+		query: query,
+		params: args,
+		conn: this,
+	});
+	this.subscriptions[id.toString()] = query;
+	return query;
 }
 
 Connection.prototype.mutation = function(args){

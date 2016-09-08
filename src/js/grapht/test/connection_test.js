@@ -95,9 +95,6 @@ t.test('create a blog engine', function(t){
 			return conn.setNode({
 				id:"alice",
 				type:"Author",
-				attrs: [
-					{name:"name",value:"alice alison"}
-				]
 			},`
 				id
 				type {
@@ -110,6 +107,25 @@ t.test('create a blog engine', function(t){
 					type: {
 						name: "Author"
 					}
+				})
+			})
+		});
+
+		test("give alice a full name", function(t){
+			return conn.setNode({
+				id:"alice",
+				type:"Author",
+				attrs: [
+					{name:"name",value:"alice alison"}
+				]
+			},`
+				...on Author {
+					name
+				}
+			`)
+			.then(function(res){
+				return t.same(res, {
+					name: "alice alison",
 				})
 			})
 		});
@@ -129,7 +145,7 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("create an Post about cheddar", function(t){
+		test("create a Post about cheddar", function(t){
 			return conn.setNode({
 				id:"cheddar-post",
 				type:"Post",
@@ -397,20 +413,53 @@ t.test('create a blog engine', function(t){
 
 
 
-		// test("subscribe query", function(t){
-		// 	var query = connection.subscribe(`query{}`);
-		// 	query.on('data', function(data){
-		// 		console.log('data', data);
-		// 	});
-		// 	query.on('error', function(err){
-		// 		console.log('error', err);
-		// 	});
-		// 	query.on('unsubscribe', function(){
-		// 		console.log('no longer listening');
-		// 	});
-		// 	query.update(`query{}`);
-
-		// })
+		test("subscribed query should update after setNode", function(t){
+			return new Promise(function(resolve){
+				var state = {dataCount: 0};
+				var query = conn.subscribe(`
+					nodes(type:Tag){
+						...on Tag {
+							name
+						}
+					}
+				`);
+				query.on('data', function(data){
+					state.dataCount++;
+					switch(state.dataCount){
+					case 1:
+						t.same(data, {
+							nodes: [
+								{name: "CHEESE"}
+							]
+						});
+						conn.setNode({
+							id: "cheese-tag",
+							type: "Tag",
+							attrs: [
+								{name:"name", value:"CHEESEY"}
+							]
+						}).catch(t.threw)
+						break;
+					case 2:
+						t.same(data, {
+							nodes: [
+								{name: "CHEESEY"}
+							]
+						});
+						query.unsubscribe();
+						break;
+					default:
+						resolve(Promise.reject(new Error('received more data than expected')))
+					}
+				});
+				query.on('error', function(err){
+					resolve(Promise.reject(new Error(err)))
+				});
+				query.on('unsubscribe', function(){
+					resolve(true);
+				});
+			})
+		})
 
 
 		console.log('begin the wait')
