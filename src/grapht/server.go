@@ -273,8 +273,8 @@ func connect() websocket.Handler {
 			}
 			fmt.Println("DISCONNECTED")
 		}()
+		fmt.Println("CONNECTED")
 		for {
-			fmt.Println("CONNECTED")
 			var data string
 			if err := websocket.Message.Receive(ws, &data); err != nil {
 				fmt.Println("RECV raw err:", err)

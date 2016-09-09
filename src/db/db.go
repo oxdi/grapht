@@ -34,8 +34,11 @@ func (db *DB) commit(g *graph.Graph, mutations []*M) error {
 		}
 	}
 	db.g = g
+	// overwrite unwritten changes on all connections
+	// TODO: try to merge changes
 	for _, c := range db.conns {
 		c.update(db.g)
+		c.log = []*M{}
 	}
 	return nil
 }

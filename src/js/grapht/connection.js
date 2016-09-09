@@ -6,6 +6,7 @@ const ERROR = "error";
 const COMMIT = "commit";
 const DATA = "data";
 const SUBSCRIBE = "subscribe";
+const TOKEN = "token";
 
 function Connection(cfg){
 	this.cfg = cfg;
@@ -20,35 +21,62 @@ function Connection(cfg){
 	}
 }
 
-Connection.prototype._connect = function(query,args){
+Connection.prototype.connect = function(){
 	var conn = this;
-	if( !conn.connected ){
-		conn.connected = new Promise(function(resolve, reject){
-			console.log('connecting...');
-			try{
-				conn.ws = new conn.cfg.WebSocket(`ws://${conn.cfg.host}/api/connect`, conn.cfg.socketCfg);
-				conn.ws.onopen = function() {
-					console.log('connection opened');
-					resolve(conn.ws);
-				};
-				conn.ws.onerror = function(e) {
-					console.log('connection error', e);
-					reject(e);
-				};
-				conn.ws.onclose = function() {
-					conn.connected = null;
-					//TODO: unsubscribe all queries
-					console.log('connection closed');
-					reject(new Error('connection onclose called'));
-				};
-				conn.ws.onmessage = conn.onMessage.bind(conn);
-			}catch(e){
-				console.log('wtf', e);
-				reject(e)
-			}
-		})
+	if( conn.ws ){
+		return Promise.resolve(conn.ws);
 	}
-	return conn.connected;
+	if( conn.connecting ){
+		return conn.connecting;
+	}
+	conn.connecting = new Promise(function(resolve){
+		var reconnect = function(){
+			try{
+				console.log('attempting connection...');
+				var ws = new conn.cfg.WebSocket(`ws://${conn.cfg.host}/api/connect`, conn.cfg.socketCfg);
+				ws.onopen = function() {
+					console.log('connection opened');
+					conn.ws = ws;
+					ws.onclose = function() {
+						conn.ws = null;
+						console.log('connection closed');
+						conn.onOffline();
+						setTimeout(function(){
+							conn.connecting = conn.connect();
+						}, 2000);
+					};
+					ws.onmessage = conn.onMessage.bind(conn);
+					// send auth msg, activate any existing subscriptions and return socket
+					resolve(conn.authenticate().then(function(){
+						conn.connecting = null;
+						for( var id in conn.subscriptions ){
+							conn.subscriptions[id].subscribe();
+						}
+						conn.onOnline();
+					}).then(() => ws));
+				};
+				ws.onerror = function(e) {
+					console.log('connection error', e);
+					setTimeout(reconnect,2000);
+				};
+			}catch(e){
+				console.log('fatal connection error', e);
+				setTimeout(function(){
+					conn.connecting = conn.connect();
+				}, 2000);
+			}
+		}
+		reconnect();
+	})
+	return conn.connecting;
+}
+
+Connection.prototype.onOnline = function(){
+	console.log('online');
+}
+
+Connection.prototype.onOffline = function(){
+	console.log('offline');
 }
 
 Connection.prototype.close = function(query,args){
@@ -61,10 +89,17 @@ Connection.prototype.authenticate = function(){
 	var conn = this;
 	console.log('authenticating...');
 	if( conn.token ){
-		console.log('already have token');
-		return Promise.resolve(conn.token);
+		console.log('login using token...');
+		return conn.send({
+			type: TOKEN,
+			token: conn.token
+		}).then(function(msg){
+			conn.token = msg.token;
+			console.log('authenticated', conn.token);
+			return conn.token;
+		});
 	}
-	console.log('login...');
+	console.log('login user/pass...');
 	return conn.send({
 		type: LOGIN,
 		username: "",
@@ -106,13 +141,9 @@ Connection.prototype.onMessage = function(evt){
 
 Connection.prototype.send = function(msg){
 	var conn = this;
-	return this._connect().then(function(){
-		return conn._send(msg);
-	})
-}
-
-Connection.prototype._send = function(msg){
-	var conn = this;
+	if( !conn.ws ){
+		return Promise.reject(new Error('not connected'));
+	}
 	return new Promise(function(resolve, reject){
 		try {
 			conn.n++;
@@ -147,6 +178,9 @@ Connection.prototype.subscribe = function(query,args){
 		conn: this,
 	});
 	this.subscriptions[id.toString()] = query;
+	if( this.ws ){
+		query.subscribe();
+	}
 	return query;
 }
 
@@ -177,21 +211,19 @@ Connection.prototype.mutation = function(args){
 
 Connection.prototype.do = function(kind, query,args){
 	var conn = this;
-	return conn.authenticate().then(function(){
-		console.log('performing do('+kind+','+query+','+JSON.stringify(args||{}));
-		return conn.send({
-			type:kind,
-			query:query,
-			params:args || {},
-		}).then(function(msg){
-			if( !msg.data ){
-				return Promise.reject(new Error('no result data'));
-			}
-			if( msg.data.errors && msg.data.errors.length > 0 ){
-				return Promise.reject(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
-			}
-			return msg.data.data;
-		});
+	console.log('performing do('+kind+','+query+','+JSON.stringify(args||{}));
+	return conn.send({
+		type:kind,
+		query:query,
+		params:args || {},
+	}).then(function(msg){
+		if( !msg.data ){
+			return Promise.reject(new Error('no result data'));
+		}
+		if( msg.data.errors && msg.data.errors.length > 0 ){
+			return Promise.reject(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
+		}
+		return msg.data.data;
 	});
 }
 

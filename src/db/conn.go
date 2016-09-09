@@ -73,13 +73,6 @@ func (c *Conn) update(g *graph.Graph) error {
 	c.Lock()
 	defer c.Unlock()
 	c.g = g
-	c.log = []*M{}
-	// for _, m := range c.log {
-	// 	err := c.ExecWithParams(m.Q, m.P)
-	// 	if err != nil {
-	// 		fmt.Println("cannot apply pending mutations after update:", m, err)
-	// 	}
-	// }
 	if c.OnChange != nil {
 		c.OnChange()
 	}

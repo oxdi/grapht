@@ -4,7 +4,6 @@ function Query(cfg){
 	this.onData = function(){}
 	this.onError = function(){}
 	this.onUnsubscribe = function(){}
-	this.ready = this.subscribe();
 }
 
 Query.prototype.on = function(evt, fn){
@@ -41,7 +40,6 @@ Query.prototype.unsubscribe = function(){
 		tag: this.cfg.tag,
 	}).then(function(msg){
 		query.onUnsubscribe();
-		this.ready = Promise.reject(new Error('not subscribed'));
 	}).catch(function(err){
 		query.onError(err);
 	});
@@ -50,25 +48,22 @@ Query.prototype.unsubscribe = function(){
 Query.prototype.subscribe = function(){
 	var query = this;
 	var conn = this.cfg.conn;
-	return conn.authenticate().then(function(){
-		return conn.send({
-			type:"subscribe",
-			tag: query.cfg.tag,
-			query: `query { ${query.cfg.query} }`,
-			params: query.cfg.params || {},
-		}).then(function(msg){
-			return query;
-		}).catch(function(err){
-			query.onError(err);
-		});
+	return conn.send({
+		type:"subscribe",
+		tag: query.cfg.tag,
+		query: `query { ${query.cfg.query} }`,
+		params: query.cfg.params || {},
+	}).then(function(msg){
+		return query;
+	}).catch(function(err){
+		query.onError(err);
 	});
 }
 
 Query.prototype.set = function(query,params){
 	this.cfg.query = query;
 	this.cfg.params = params || {};
-	this.ready = this.subscribe();
-	return this.ready;
+	return this.subscribe();
 }
 
 module.exports = Query;
