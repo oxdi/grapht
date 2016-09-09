@@ -10,5 +10,7 @@
   "license": "ISC",
   "devDependencies": {
     "tap": "^6.3.2"
+  },
+  "dependencies": {
   }
 }

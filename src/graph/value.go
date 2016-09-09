@@ -10,4 +10,5 @@ const (
 	BcryptText = "BcryptText"
 	HasOne     = "HasOne"
 	HasMany    = "HasMany"
+	DataTable  = "DataTable"
 )

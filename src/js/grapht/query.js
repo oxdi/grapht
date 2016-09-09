@@ -50,15 +50,17 @@ Query.prototype.unsubscribe = function(){
 Query.prototype.subscribe = function(){
 	var query = this;
 	var conn = this.cfg.conn;
-	return conn.send({
-		type:"subscribe",
-		tag: this.cfg.tag,
-		query: `query { ${this.cfg.query} }`,
-		params:this.cfg.params || {},
-	}).then(function(msg){
-		return query;
-	}).catch(function(err){
-		query.onError(err);
+	return conn.authenticate().then(function(){
+		return conn.send({
+			type:"subscribe",
+			tag: query.cfg.tag,
+			query: `query { ${query.cfg.query} }`,
+			params: query.cfg.params || {},
+		}).then(function(msg){
+			return query;
+		}).catch(function(err){
+			query.onError(err);
+		});
 	});
 }
 

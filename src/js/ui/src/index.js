@@ -12,26 +12,63 @@ WebFont.load({
 	},
 });
 
-// import 'react-md/dist/react-md.min.css';
-import MyAwesomeComponent from './MyAwesomeComponent';
+import Grapht from 'grapht'
+let store = Grapht.connect({appID:"example"});
+window.store = store;
+store.navigate = function(path,params){
+	if( !store.router ){
+		return;
+	}
+	store.router.push(path);
+}
 
-const App = ({children},{router}) => (
-	<NavigationDrawer
-		drawerTitle="Structura"
-		toolbarTitle=""
-		tabletDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
-		desktopDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
-		navItems={[{
+class App extends React.Component {
+
+	static contextTypes = {
+		router: React.PropTypes.object.isRequired
+	};
+
+	state = {data: null}
+
+	onData = (data) => {
+		this.setState({data: data});
+	}
+
+	onDataError = (err) => {
+		this.setState({dataError: err});
+	}
+
+	componentDidMount(){
+		store.router = this.context.router;
+		this.query = store.subscribe(`
+			types {
+				name
+			}
+		`)
+		this.query.on('data', this.onData);
+		this.query.on('error', this.onDataError);
+	}
+
+	componentWillUnmount(){
+		this.query.unsubscribe();
+	}
+
+	sidebarItems(){
+		let router = this.context.router;
+		return [{
 			primaryText: 'Types',
 			onClick: () => router.push('/types'),
-		}, {
+		},{
 			primaryText: 'Content',
 			onClick: () => router.push('/content'),
-		}, {
+		},{
 			primaryText: 'Settings',
 			onClick: () => router.push('/settings'),
-		}]}
-		toolbarChildren={
+		}]
+	}
+
+	toolbarItems(){
+		return (
 			<IconButton
 				tooltipLabel="Close Demo"
 				tooltipPosition="left"
@@ -39,18 +76,32 @@ const App = ({children},{router}) => (
 			>
 				close
 			</IconButton>
+		);
+	}
+
+	render(){
+		if( !this.state.data ){
+			return <div>loading</div>;
 		}
-	>
-		{children}
-	</NavigationDrawer>
-);
+		let section = React.cloneElement(this.props.children, {
+			data: this.state.data,
+		});
+		return (
+			<NavigationDrawer
+				drawerTitle="Structura"
+				toolbarTitle=""
+				tabletDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
+				desktopDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
+				navItems={this.sidebarItems()}
+				toolbarChildren={this.toolbarItems()}>
+				{section}
+			</NavigationDrawer>
+		);
+	}
+}
 
-App.contextTypes = {
-	router: React.PropTypes.object.isRequired
-};
-
-const Types = () => (
-	<div>TYPES</div>
+const Types = ({params,data,location}) => (
+	<div>{data.types.map(t => <div key={t.name}>{t.name}</div>)}</div>
 );
 
 const Content = () => (

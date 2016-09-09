@@ -31,7 +31,10 @@ module.exports.run = function(fn){
 
 	return serving.then(function(){
 		console.log('running fn()');
-		return fn({appID: appID});
+		return fn({
+			appID: appID,
+			host: 'localhost:8282'
+		});
 	}).then(function(){
 		console.log('killing');
 		proc.kill();

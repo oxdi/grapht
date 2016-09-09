@@ -1,4 +1,3 @@
-const WebSocket = require('ws');
 const Query = require('./query');
 const QUERY = "query";
 const EXEC = "exec";
@@ -13,6 +12,12 @@ function Connection(cfg){
 	this.promises = {};
 	this.subscriptions = {};
 	this.n = 0;
+	if( !this.cfg.WebSocket ){
+		this.cfg.WebSocket = WebSocket;
+	}
+	if( !this.cfg.host ){
+		this.cfg.host = 'toolbox.oxdi.eu:8282';
+	}
 }
 
 Connection.prototype._connect = function(query,args){
@@ -21,22 +26,22 @@ Connection.prototype._connect = function(query,args){
 		conn.connected = new Promise(function(resolve, reject){
 			console.log('connecting...');
 			try{
-				conn.ws =  new WebSocket('ws://localhost:8282/api/connect',{
-						origin: 'http://localhost:8282'
-				});
-				conn.ws.on('open', function() {
+				conn.ws = new conn.cfg.WebSocket(`ws://${conn.cfg.host}/api/connect`, conn.cfg.socketCfg);
+				conn.ws.onopen = function() {
 					console.log('connection opened');
 					resolve(conn.ws);
-				});
-				conn.ws.on('error', function(e) {
+				};
+				conn.ws.onerror = function(e) {
 					console.log('connection error', e);
 					reject(e);
-				});
-				conn.ws.on('close', function() {
+				};
+				conn.ws.onclose = function() {
+					conn.connected = null;
+					//TODO: unsubscribe all queries
 					console.log('connection closed');
-					reject();
-				});
-				conn.ws.on('message', conn.onMessage.bind(conn));
+					reject(new Error('connection onclose called'));
+				};
+				conn.ws.onmessage = conn.onMessage.bind(conn);
 			}catch(e){
 				console.log('wtf', e);
 				reject(e)
@@ -54,10 +59,12 @@ Connection.prototype.close = function(query,args){
 
 Connection.prototype.authenticate = function(){
 	var conn = this;
-	console.log('authenticating');
+	console.log('authenticating...');
 	if( conn.token ){
+		console.log('already have token');
 		return Promise.resolve(conn.token);
 	}
+	console.log('login...');
 	return conn.send({
 		type: LOGIN,
 		username: "",
@@ -70,7 +77,8 @@ Connection.prototype.authenticate = function(){
 	});
 }
 
-Connection.prototype.onMessage = function(json){
+Connection.prototype.onMessage = function(evt){
+	var json = evt.data;
 	var msg = JSON.parse(json);
 	if( this.promises[msg.tag] ){
 		console.log('onMessage -> promise', json);
@@ -217,10 +225,28 @@ Connection.prototype.setType = function(args, returning){
 	});
 }
 
+// example setNode({id:"0001", type:"Page", values:{name:"my page"}})
 Connection.prototype.setNode = function(args, returning){
 	var conn = this;
-	if( !returning ){
-		returning = `id`;
+	var node = {
+		id: args.id,
+		type: args.type,
+		attrs: [],
+	};
+	if( !node.id ){
+		return Promise.reject(new Error('setNode requires id'));
+	}
+	if( !node.type ){
+		return Promise.reject(new Error('setNode requires type'));
+	}
+	// serialize values to attrs
+	if( args.values ){
+		for( var k in args.values ){
+			node.attrs.push({
+				name: k,
+				value: JSON.stringify(args.values[k]),
+			});
+		}
 	}
 	return conn.mutation({
 		input: {
@@ -229,11 +255,11 @@ Connection.prototype.setNode = function(args, returning){
 			attrs: '[AttrArg]'
 		},
 		query: `
-			node:set(${conn.toPlaceholders(args)}) {
-				${returning}
+			node:set(${conn.toPlaceholders(node)}) {
+				${returning || 'id'}
 			}
 		`,
-		params: args
+		params: node
 	})
 	.then(function(data){
 		return data.node;

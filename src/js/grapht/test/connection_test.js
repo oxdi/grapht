@@ -1,3 +1,5 @@
+
+var WebSocket = require('ws');
 var t = require('tap')
 var Grapht = require('../index.js');
 var server = require('./server.js');
@@ -5,24 +7,39 @@ var server = require('./server.js');
 
 t.test('create a blog engine', function(t){
 	return server.run(function(info){
-		var conn = Grapht.connect({appID: info.appID});
-		var conn2 = Grapht.connect({appID: info.appID});
-		var eq = function(t, json){
-			return function(result){
-				t.same(result, json);
-				return;
-			}
+
+		function cfg(){
+			return {
+				appID: info.appID,
+				host: info.host,
+				WebSocket: WebSocket,
+				socketCfg: {
+					origin: `http://${info.host}`
+				},
+			};
 		}
+
 		var tests = [];
-		var test = function(name, fn){
-			tests.push(t.test(name, fn));
+		function test(name, fn){
+			tests.push(
+				t.test(name, function(t){
+					console.log("\n------------\n"+name+"...\n--------\n");
+					return fn(t)
+				})
+			);
 		}
+
+		var conn = Grapht.connect(cfg());
+		var conn2 = Grapht.connect(cfg());
 
 		test("create an Author type", function(t){
 			return conn.setType({
 				name:"Author",
 				fields:[
 					{name:"name",type:"Text"},
+					{name:"age",type:"Int"},
+					{name:"height", type:"Float"},
+					{name:"admin", type:"Boolean"},
 					{name:"posts",type:"HasMany",edge:"author", toType:"Post"}
 				]
 			}, `
@@ -38,6 +55,9 @@ t.test('create a blog engine', function(t){
 					name: "Author",
 					fields: [
 						{name: "name", type:"Text", toType:null},
+						{name: "age", type:"Int", toType:null},
+						{name: "height", type:"Float", toType:null},
+						{name: "admin", type:"Boolean", toType:null},
 						{name: "posts", type:"HasMany", toType:"Post"}
 					]
 				})
@@ -111,21 +131,30 @@ t.test('create a blog engine', function(t){
 			})
 		});
 
-		test("give alice a full name", function(t){
+		test("give alice a full name, age, height and admin flag", function(t){
 			return conn.setNode({
 				id:"alice",
 				type:"Author",
-				attrs: [
-					{name:"name",value:"alice alison"}
-				]
+				values: {
+					name: "alice alison",
+					age: 52,
+					height: 1.6,
+					admin: true,
+				}
 			},`
 				...on Author {
 					name
+					age
+					height
+					admin
 				}
 			`)
 			.then(function(res){
 				return t.same(res, {
 					name: "alice alison",
+					age: 52,
+					height: 1.6,
+					admin: true,
 				})
 			})
 		});
@@ -134,9 +163,9 @@ t.test('create a blog engine', function(t){
 			return conn.setNode({
 				id:"bob",
 				type:"Author",
-				attrs: [
-					{name:"name",value:"bobby bobbington"}
-				]
+				values: {
+					name:"bobby bobbington"
+				}
 			})
 			.then(function(res){
 				return t.same(res, {
@@ -149,10 +178,10 @@ t.test('create a blog engine', function(t){
 			return conn.setNode({
 				id:"cheddar-post",
 				type:"Post",
-				attrs: [
-					{name:"title",value:"about cheddar"},
-					{name:"body",value:"cheddar comes from the moon"},
-				]
+				values: {
+					title: "about cheddar",
+					body: "cheddar comes from the moon",
+				}
 			},`
 				id
 				type {
@@ -173,16 +202,19 @@ t.test('create a blog engine', function(t){
 			return conn.setNode({
 				id:"stilton-post",
 				type:"Post",
-				attrs: [
-					{name:"title",value:"about stilton"},
-					{name:"body",value:"stilton is the bluest of cheeses"},
-				]
+				values: {
+					title: "about stilton",
+					body: "stilton is the bluest of cheeses",
+				}
 			},`
-				id
+				...on Post {
+					title
+				}
+
 			`)
 			.then(function(res){
 				return t.same(res, {
-					id: "stilton-post",
+					title: "about stilton",
 				})
 			})
 		});
@@ -233,9 +265,9 @@ t.test('create a blog engine', function(t){
 			return conn.setNode({
 				id:"cheese-tag",
 				type:"Tag",
-				attrs: [
-					{name:"name",value:"CHEESE"},
-				]
+				values: {
+					name: "CHEESE",
+				}
 			},`
 				id
 				attrs {
@@ -247,7 +279,7 @@ t.test('create a blog engine', function(t){
 				return t.same(res, {
 					id: "cheese-tag",
 					attrs: [
-						{name:"name", value:"CHEESE"}
+						{name:"name", value: JSON.stringify("CHEESE")}
 					]
 				})
 			})
@@ -497,9 +529,9 @@ t.test('create a blog engine', function(t){
 						conn.setNode({
 							id: "cheese-tag",
 							type: "Tag",
-							attrs: [
-								{name:"name", value:"CHEESEY"}
-							]
+							values: {
+								name: "CHEESEY"
+							}
 						}).catch(t.threw)
 						break;
 					case 2:
@@ -546,9 +578,9 @@ t.test('create a blog engine', function(t){
 						conn2.setNode({
 							id: "cheese-tag",
 							type: "Tag",
-							attrs: [
-								{name:"name", value:"cheese"}
-							]
+							values: {
+								name: "cheese"
+							}
 						}).then(function(){
 							return conn2.commit();
 						}).catch(t.threw)

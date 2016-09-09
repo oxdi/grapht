@@ -521,7 +521,13 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 			case graph.HasMany:
 				return n.In(f.Edge).Nodes(), nil
 			default:
-				return n.Attr(f.Name), nil
+				encodedValue := n.Attr(f.Name)
+				if encodedValue == "" || encodedValue == "null" {
+					return nil, nil
+				}
+				var v interface{}
+				err := json.Unmarshal([]byte(encodedValue), &v)
+				return v, err
 			}
 		},
 	}
