@@ -29,6 +29,7 @@
     "postcss-import": "^8.1.2",
     "postcss-scss": "^0.3.0",
     "sassify": "^2.0.0",
+    "tape-run": "^2.1.4",
     "watchify": "^3.7.0",
     "webfontloader": "^1.6.26",
     "webpack": "^1.13.2"

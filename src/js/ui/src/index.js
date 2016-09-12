@@ -38,7 +38,17 @@ class App extends React.Component {
 		this.setState({dataError: err});
 	}
 
+	onOnline = (err) => {
+		this.setState({online: true});
+	}
+
+	onOffline = (err) => {
+		this.setState({online: false});
+	}
+
 	componentDidMount(){
+		store.onOnline = this.onOnline;
+		store.onOffline = this.onOffline;
 		store.router = this.context.router;
 		this.query = store.subscribe(`
 			types {
@@ -85,11 +95,13 @@ class App extends React.Component {
 		}
 		let section = React.cloneElement(this.props.children, {
 			data: this.state.data,
+			online: this.state.online,
 		});
+		let onlineMessage = this.state.online ? 'online' : 'offline';
 		return (
 			<NavigationDrawer
 				drawerTitle="Structura"
-				toolbarTitle=""
+				toolbarTitle={onlineMessage}
 				tabletDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				desktopDrawerType={NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				navItems={this.sidebarItems()}

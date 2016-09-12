@@ -3,10 +3,30 @@ var fs = require('fs');
 var cwd = '../../../';
 var dataDir = cwd+'data/';
 
-module.exports.run = function(fn){
-	var appID = 'jstest';
-	var testDB = dataDir+appID;
-	fs.writeFileSync(testDB, '');
+var run = require('tape-run');
+var browserify = require('browserify');
+
+var appID = 'jstest';
+var testDB = dataDir+appID;
+fs.writeFileSync(testDB, '');
+
+function bundleAndRun(){
+	return new Promise(function(resolve, reject){
+		browserify(__dirname + '/connection_test.js')
+			.bundle()
+			.pipe(run({browser:'phantomjs'}))
+			.on('results', console.log)
+			.pipe(process.stdout)
+			.on('error', function(err){
+				reject(err);
+			})
+			.on('end', function(){
+				resolve(true);
+			})
+	});
+}
+
+function startServer(){
 	var proc = spawn('./bin/grapht',{
 		cwd: cwd
 	});
@@ -15,8 +35,7 @@ module.exports.run = function(fn){
 	proc.on('close', function(){
 		console.log("SERVER EXITED!")
 	});
-
-	var serving = new Promise(function(resolve, reject){
+	return new Promise(function(resolve, reject){
 		proc.stdout.on('data', function(data){
 			console.log("\nSERVER SAID:", data.toString(), "\n")
 			if( started ){
@@ -24,22 +43,21 @@ module.exports.run = function(fn){
 			}
 			if( /serving/.test(data.toString()) ){
 				started = true;
-				resolve();
+				resolve(proc);
 			}
 		});
 	})
-
-	return serving.then(function(){
-		console.log('running fn()');
-		return fn({
-			appID: appID,
-			host: 'localhost:8282'
-		});
-	}).then(function(){
-		console.log('killing');
-		proc.kill();
-		fs.unlinkSync(testDB);
-	});
-
 }
+
+startServer().then(function(proc){
+	console.log('running fn()');
+	return bundleAndRun().then(function(){
+		return proc;
+	})
+}).then(function(){
+	console.log('stopping server');
+	proc.kill();
+	fs.unlinkSync(testDB);
+});
+
 
