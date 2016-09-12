@@ -4,7 +4,7 @@
   "description": "grapht client",
   "main": "index.js",
   "scripts": {
-    "test": "browserify test/connection_test.js | tape-run | tap-bail"
+    "test": "browserify test/connection_test.js | tape-run -b chromium | tap-spec"
   },
   "author": "",
   "license": "ISC",
@@ -12,8 +12,13 @@
     "blue-tape": "^1.0.0",
     "browserify": "^13.1.0",
     "colortape": "^0.1.1",
+    "faucet": "0.0.1",
     "tap-bail": "0.0.0",
+    "tap-diff": "^0.1.1",
+    "tap-nyan": "0.0.2",
     "tap-pessimist": "^1.0.1",
+    "tap-simple": "^0.3.1",
+    "tap-spec": "^4.1.1",
     "tape": "^4.6.0",
     "tape-run": "^2.1.4"
   },
