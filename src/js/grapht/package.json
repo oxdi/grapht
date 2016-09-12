@@ -10,13 +10,9 @@
   "license": "ISC",
   "devDependencies": {
     "blue-tape": "^1.0.0",
-    "browser-launcher": "^1.0.0",
     "browserify": "^13.1.0",
-    "phantomjs": "^2.1.7",
-    "tap": "^6.3.2",
     "tape": "^4.6.0",
     "tape-run": "^2.1.4",
-    "testling": "^1.7.1"
   },
   "dependencies": {}
 }
