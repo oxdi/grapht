@@ -4,13 +4,16 @@
   "description": "grapht client",
   "main": "index.js",
   "scripts": {
-    "test": "tap test/*_test.js -b"
+    "test": "browserify test/connection_test.js | tape-run | tap-bail"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "blue-tape": "^1.0.0",
     "browserify": "^13.1.0",
+    "colortape": "^0.1.1",
+    "tap-bail": "0.0.0",
+    "tap-pessimist": "^1.0.1",
     "tape": "^4.6.0",
     "tape-run": "^2.1.4"
   },

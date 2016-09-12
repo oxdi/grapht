@@ -14,7 +14,7 @@ function bundleAndRun(){
 	return new Promise(function(resolve, reject){
 		browserify(__dirname + '/connection_test.js')
 			.bundle()
-			.pipe(run({browser:'phantomjs'}))
+			.pipe(run({}))
 			.on('results', console.log)
 			.pipe(process.stdout)
 			.on('error', function(err){
@@ -24,6 +24,26 @@ function bundleAndRun(){
 				resolve(true);
 			})
 	});
+	var proc = spawn(['./node_modules/.bin/browserify', 'test/connection_test.js', ],{
+		cwd: cwd
+	});
+	var started = false;
+
+	proc.on('close', function(){
+		console.log("browserify exited")
+	});
+	return new Promise(function(resolve, reject){
+		proc.stdout.on('data', function(data){
+			console.log("\nSERVER SAID:", data.toString(), "\n")
+			if( started ){
+				return
+			}
+			if( /serving/.test(data.toString()) ){
+				started = true;
+				resolve(proc);
+			}
+		});
+	})
 }
 
 function startServer(){

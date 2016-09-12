@@ -87,6 +87,7 @@ type WireMsg struct {
 	Token    string                 `json:"token,omitempty"`
 	Error    string                 `json:"error,omitempty"`
 	Tag      string                 `json:"tag,omitempty"`
+	Subscription      string                 `json:"subscription,omitempty"`
 	Data     interface{}            `json:"data,omitempty"`
 }
 
@@ -204,16 +205,16 @@ func recv(c *conn, msg *WireMsg) error {
 		if c.db == nil {
 			return fmt.Errorf("cannot query: not connected")
 		}
-		c.subscriptions[msg.Tag] = func() {
+		c.subscriptions[msg.Subscription] = func() {
 			result := c.db.QueryWithParams(msg.Query, msg.Params)
 			err := send(c.ws, &WireMsg{
-				Tag:  msg.Tag,
+				Subscription:  msg.Subscription,
 				Type: "data",
 				Data: result,
 			})
 			if err != nil {
 				senderr := send(c.ws, &WireMsg{
-					Tag:   msg.Tag,
+					Subscription:   msg.Subscription,
 					Type:  "error",
 					Error: err.Error(),
 				})

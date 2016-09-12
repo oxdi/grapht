@@ -1,31 +1,17 @@
 
 // var WebSocket = require('ws');
-var t = require('blue-tape')
+var test = require('blue-tape')
 var Grapht = require('../index.js');
-var server = require('./server.js');
-
-
-t.test('create a blog engine', function(t){
 
 	function cfg(){
 		return {
-			appID: info.appID,
-			host: info.host,
+			appID: "jstest",
+			host: "localhost:8282",
 			// WebSocket: WebSocket,
 			// socketCfg: {
 			// 	origin: `http://${info.host}`
 			// },
 		};
-	}
-
-	var tests = [];
-	function test(name, fn){
-		tests.push(
-			t.test(name, function(t){
-				console.log("\n------------\n"+name+"...\n--------\n");
-				return fn(t)
-			})
-		);
 	}
 
 	var conn = Grapht.connect(cfg());
@@ -606,12 +592,3 @@ t.test('create a blog engine', function(t){
 		})
 
 	})
-
-
-	console.log('begin the wait')
-	return Promise.all(tests).then(function(){
-		console.log('all tests done')
-		conn.close();
-	}).catch(t.threw);
-
-})

@@ -35,9 +35,9 @@ Query.prototype._onData = function(msg){
 Query.prototype.unsubscribe = function(){
 	var query = this;
 	var conn = this.cfg.conn;
-	return conn.send({
+	return conn._send({
 		type:"unsubscribe",
-		tag: this.cfg.tag,
+		subscription: this.cfg.subscription,
 	}).then(function(msg){
 		query.onUnsubscribe();
 	}).catch(function(err){
@@ -48,9 +48,9 @@ Query.prototype.unsubscribe = function(){
 Query.prototype.subscribe = function(){
 	var query = this;
 	var conn = this.cfg.conn;
-	return conn.send({
+	return conn._send({
 		type:"subscribe",
-		tag: query.cfg.tag,
+		subscription: query.cfg.subscription,
 		query: `query { ${query.cfg.query} }`,
 		params: query.cfg.params || {},
 	}).then(function(msg){

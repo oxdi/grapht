@@ -100,7 +100,7 @@ Connection.prototype.authenticate = function(){
 		});
 	}
 	console.log('login user/pass...');
-	return conn.send({
+	return conn._send({
 		type: LOGIN,
 		username: "",
 		password: "",
@@ -124,9 +124,9 @@ Connection.prototype.onMessage = function(evt){
 			handler(msg);
 		}
 		delete this.promises[msg.tag];
-	} else if( this.subscriptions[msg.tag] ){
+	} else if( this.subscriptions[msg.subscription] ){
 		console.log('onMessage -> subscription', json);
-		var query = this.subscriptions[msg.tag];
+		var query = this.subscriptions[msg.subscription];
 		if( msg.type == ERROR ){
 			query.onError(msg.error);
 		} else if( msg.type == DATA ){
@@ -140,6 +140,13 @@ Connection.prototype.onMessage = function(evt){
 }
 
 Connection.prototype.send = function(msg){
+	var conn = this;
+	return this.connect().then(function(){
+		return conn._send(msg)
+	})
+}
+
+Connection.prototype._send = function(msg){
 	var conn = this;
 	if( !conn.ws ){
 		return Promise.reject(new Error('not connected'));
@@ -172,7 +179,7 @@ Connection.prototype.query = function(query,params){
 Connection.prototype.subscribe = function(query,args){
 	var id = ++this.n;
 	var query = new Query({
-		tag: id.toString(),
+		subscription: id.toString(),
 		query: query,
 		params: args,
 		conn: this,
