@@ -4,6 +4,7 @@ import (
 	"db"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -59,17 +60,20 @@ func authenticate(uid, password, aid string) (string, string, *db.DB, error) {
 	// 	return "", "", nil, fmt.Errorf("invalid password")
 	// }
 	// Create token
+	t, err := createToken(uid, aid)
+	if err != nil {
+		return "", "", nil, err
+	}
+	return t, uid, db, nil
+}
+
+func createToken(uid, aid string) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 	claims["uid"] = uid
 	claims["aid"] = aid
-	// Generate encoded token and send it as response.
-	t, err := token.SignedString([]byte(AUTH_SECRET))
-	if err != nil {
-		return "", "", nil, err
-	}
-	return t, uid, db, nil
+	return token.SignedString([]byte(AUTH_SECRET))
 }
 
 type QueryReq struct {
@@ -78,17 +82,17 @@ type QueryReq struct {
 }
 
 type WireMsg struct {
-	Type     string                 `json:"type,omitempty"`
-	Query    string                 `json:"query,omitempty"`
-	Params   map[string]interface{} `json:"params,omitempty"`
-	Username string                 `json:"username,omitempty"`
-	Password string                 `json:"password,omitempty"`
-	AppID    string                 `json:"appID,omitempty"`
-	Token    string                 `json:"token,omitempty"`
-	Error    string                 `json:"error,omitempty"`
-	Tag      string                 `json:"tag,omitempty"`
-	Subscription      string                 `json:"subscription,omitempty"`
-	Data     interface{}            `json:"data,omitempty"`
+	Type         string                 `json:"type,omitempty"`
+	Query        string                 `json:"query,omitempty"`
+	Params       map[string]interface{} `json:"params,omitempty"`
+	Username     string                 `json:"username,omitempty"`
+	Password     string                 `json:"password,omitempty"`
+	AppID        string                 `json:"appID,omitempty"`
+	Token        string                 `json:"token,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Tag          string                 `json:"tag,omitempty"`
+	Subscription string                 `json:"subscription,omitempty"`
+	Data         interface{}            `json:"data,omitempty"`
 }
 
 type conn struct {
@@ -208,15 +212,15 @@ func recv(c *conn, msg *WireMsg) error {
 		c.subscriptions[msg.Subscription] = func() {
 			result := c.db.QueryWithParams(msg.Query, msg.Params)
 			err := send(c.ws, &WireMsg{
-				Subscription:  msg.Subscription,
-				Type: "data",
-				Data: result,
+				Subscription: msg.Subscription,
+				Type:         "data",
+				Data:         result,
 			})
 			if err != nil {
 				senderr := send(c.ws, &WireMsg{
-					Subscription:   msg.Subscription,
-					Type:  "error",
-					Error: err.Error(),
+					Subscription: msg.Subscription,
+					Type:         "error",
+					Error:        err.Error(),
 				})
 				if senderr != nil {
 					fmt.Println("SENDERR", senderr)
@@ -301,6 +305,63 @@ func connect() websocket.Handler {
 	})
 }
 
+func createDB(c echo.Context) error {
+	req := struct {
+		AppID    string
+		Username string
+		Password string
+		Email    string
+	}{}
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+	db, err := databases.Create(req.AppID)
+	if err != nil {
+		return err
+	}
+	conn := db.NewConnection("")
+	mutations := []string{
+		`
+			defineType(name:"User", fields:[
+				{name: "email", type:"Text"},
+				{name: "password", type:"Text"},
+			]) {
+				name
+			}
+		`, `
+			set(id:"guest",type:"User"){
+				id
+			}
+		`, fmt.Sprintf(`
+			set(id:"%s", type: "User", attrs: [
+				{name:"email", value:"%s"},
+				{name:"password", value:"%s"}
+			]) {
+				id
+			}
+		`, req.Username, req.Email, req.Password),
+	}
+	for _, m := range mutations {
+		result := conn.Exec("mutation {" + m + "}")
+		if len(result.Errors) > 0 {
+			return fmt.Errorf("create failed: %s", result.Errors[0])
+		}
+	}
+	if err := conn.Commit(); err != nil {
+		return err
+	}
+	t, err := createToken(req.Username, req.AppID)
+	if err != nil {
+		return err
+	}
+	res := struct {
+		Token string `json:"token"`
+	}{
+		Token: t,
+	}
+	return c.JSON(http.StatusCreated, res)
+}
+
 func StartServer() error {
 	e := echo.New()
 	e.Use(middleware.CORS())
@@ -312,6 +373,9 @@ func StartServer() error {
 
 	// Socket api
 	e.GET("/api/connect", standard.WrapHandler(connect()))
+
+	// signup handler
+	e.POST("/api/create", createDB)
 
 	// Restricted routes
 	// api := e.Group("/api")

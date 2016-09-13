@@ -4,11 +4,14 @@
   "description": "grapht client",
   "main": "index.js",
   "scripts": {
-    "test": "browserify test/connection_test.js | tape-run -b chromium | tap-spec"
+    "test": "browserify --debug test/connection_test.js | tape-run -b chromium | node test/bail.js | faucet"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "babel-preset-es2015": "^6.14.0",
+    "babel-preset-stage-0": "^6.5.0",
+    "babelify": "^7.3.0",
     "blue-tape": "^1.0.0",
     "browserify": "^13.1.0",
     "colortape": "^0.1.1",
@@ -22,5 +25,20 @@
     "tape": "^4.6.0",
     "tape-run": "^2.1.4"
   },
-  "dependencies": {}
+  "dependencies": {
+    "whatwg-fetch": "^1.0.0"
+  },
+  "browserify": {
+    "transform": [
+      [
+        "babelify",
+        {
+          "presets": [
+            "es2015",
+            "stage-0"
+          ]
+        }
+      ]
+    ]
+  }
 }

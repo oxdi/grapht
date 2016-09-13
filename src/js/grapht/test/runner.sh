@@ -1,7 +1,7 @@
 #!/bin/bash
 (
 	cd ../../../ &&
-	echo '' > data/jstest &&
+	rm data/jstest;
 	./bin/grapht >/dev/null &
 ) && xvfb-run npm test
 

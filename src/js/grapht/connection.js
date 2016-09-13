@@ -24,7 +24,7 @@ function Connection(cfg){
 Connection.prototype.connect = function(){
 	var conn = this;
 	if( conn.ws ){
-		return Promise.resolve(conn.ws);
+		return Promise.resolve(conn);
 	}
 	if( conn.connecting ){
 		return conn.connecting;
@@ -32,14 +32,14 @@ Connection.prototype.connect = function(){
 	conn.connecting = new Promise(function(resolve){
 		var reconnect = function(){
 			try{
-				console.log('attempting connection...');
+				conn.log('attempting connection...');
 				var ws = new conn.cfg.WebSocket(`ws://${conn.cfg.host}/api/connect`, conn.cfg.socketCfg);
 				ws.onopen = function() {
-					console.log('connection opened');
+					conn.log('connection opened');
 					conn.ws = ws;
 					ws.onclose = function() {
 						conn.ws = null;
-						console.log('connection closed');
+						conn.log('connection closed');
 						conn.onOffline();
 						setTimeout(function(){
 							conn.connecting = conn.connect();
@@ -53,14 +53,15 @@ Connection.prototype.connect = function(){
 							conn.subscriptions[id].subscribe();
 						}
 						conn.onOnline();
-					}).then(() => ws));
+					}).then(() => conn));
+
 				};
 				ws.onerror = function(e) {
-					console.log('connection error', e);
+					conn.log('connection error', e);
 					setTimeout(reconnect,2000);
 				};
 			}catch(e){
-				console.log('fatal connection error', e);
+				conn.log('fatal connection error', e);
 				setTimeout(function(){
 					conn.connecting = conn.connect();
 				}, 2000);
@@ -72,11 +73,13 @@ Connection.prototype.connect = function(){
 }
 
 Connection.prototype.onOnline = function(){
-	console.log('online');
+	var conn = this;
+	conn.log('online');
 }
 
 Connection.prototype.onOffline = function(){
-	console.log('offline');
+	var conn = this;
+	conn.log('offline');
 }
 
 Connection.prototype.close = function(query,args){
@@ -85,30 +88,37 @@ Connection.prototype.close = function(query,args){
 	}
 }
 
+Connection.prototype.log = function(...args){
+	if( this.debug && typeof console == 'object' && console.log ){
+		console.log(...args);
+	}
+}
+
 Connection.prototype.authenticate = function(){
 	var conn = this;
-	console.log('authenticating...');
-	if( conn.token ){
-		console.log('login using token...');
-		return conn.send({
+	if( conn.cfg.token ){
+		conn.log('authenticating using token...');
+		return conn._send({
 			type: TOKEN,
-			token: conn.token
+			token: conn.cfg.token
 		}).then(function(msg){
-			conn.token = msg.token;
-			console.log('authenticated', conn.token);
-			return conn.token;
+			conn.cfg.token = msg.token;
+			conn.log('authenticated', conn.cfg.token);
+			return conn.cfg.token;
 		});
 	}
-	console.log('login user/pass...');
+	conn.log('authenticating using user/pass...');
 	return conn._send({
 		type: LOGIN,
-		username: "",
-		password: "",
+		username: conn.cfg.username,
+		password: conn.cfg.password,
 		appID: conn.cfg.appID
 	}).then(function(msg){
-		conn.token = msg.token;
-		console.log('authenticated', conn.token);
-		return conn.token;
+		conn.cfg.token = msg.token;
+		conn.cfg.username = null;
+		conn.cfg.password = null;
+		conn.log('authenticated', conn.cfg.token);
+		return conn.cfg.token;
 	});
 }
 
@@ -116,7 +126,7 @@ Connection.prototype.onMessage = function(evt){
 	var json = evt.data;
 	var msg = JSON.parse(json);
 	if( this.promises[msg.tag] ){
-		console.log('onMessage -> promise', json);
+		this.log('onMessage -> promise', json);
 		var handler = this.promises[msg.tag];
 		if( msg.type == ERROR ){
 			handler(Promise.reject(new Error(msg.error)));
@@ -125,7 +135,7 @@ Connection.prototype.onMessage = function(evt){
 		}
 		delete this.promises[msg.tag];
 	} else if( this.subscriptions[msg.subscription] ){
-		console.log('onMessage -> subscription', json);
+		this.log('onMessage -> subscription', json);
 		var query = this.subscriptions[msg.subscription];
 		if( msg.type == ERROR ){
 			query.onError(msg.error);
@@ -135,7 +145,7 @@ Connection.prototype.onMessage = function(evt){
 			throw new Error('query subscription cannot handle msg type:'+msg.type);
 		}
 	} else {
-		console.log('onMessage -> Unhandled msg tag', json);
+		this.log('onMessage -> Unhandled msg tag', json);
 	}
 }
 
@@ -157,7 +167,7 @@ Connection.prototype._send = function(msg){
 			msg.tag = msg.tag || (conn.n).toString();
 			conn.promises[msg.tag] = resolve;
 			var data = JSON.stringify(msg);
-			console.log('sending', data);
+			conn.log('sending', data);
 			conn.ws.send(data, function ack(err){
 				if( err ){
 					reject(err)
@@ -218,7 +228,7 @@ Connection.prototype.mutation = function(args){
 
 Connection.prototype.do = function(kind, query,args){
 	var conn = this;
-	console.log('performing do('+kind+','+query+','+JSON.stringify(args||{}));
+	conn.log('performing do('+kind+','+query+','+JSON.stringify(args||{}));
 	return conn.send({
 		type:kind,
 		query:query,
