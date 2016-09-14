@@ -1,5 +1,14 @@
 package graph
 
+func stringIn(needle string, haystack []string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}
+
 type Attr struct {
 	Name  string
 	Value string
@@ -101,14 +110,16 @@ func (n *Node) Edges(edgeName string, edgeDir string) Edges {
 	}
 	return edges
 }
-func (n *Node) Out(edgeName string) Edges {
+func (n *Node) Out(edgeNames ...string) Edges {
 	edges := Edges{}
 	for _, e := range n.g.edges {
 		if e.from != n.n.id {
 			continue
 		}
-		if edgeName != "" && e.name != edgeName {
-			continue
+		if len(edgeNames) > 0 {
+			if !stringIn(e.name, edgeNames) {
+				continue
+			}
 		}
 		edges = append(edges, &Edge{
 			e: e,
@@ -118,14 +129,16 @@ func (n *Node) Out(edgeName string) Edges {
 	return edges
 }
 
-func (n *Node) In(edgeName string) Edges {
+func (n *Node) In(edgeNames ...string) Edges {
 	edges := Edges{}
 	for _, e := range n.g.edges {
 		if e.to != n.n.id {
 			continue
 		}
-		if edgeName != "" && e.name != edgeName {
-			continue
+		if len(edgeNames) > 0 {
+			if !stringIn(e.name, edgeNames) {
+				continue
+			}
 		}
 		edges = append(edges, &Edge{
 			in: true,

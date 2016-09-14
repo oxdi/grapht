@@ -11,4 +11,6 @@ const (
 	HasOne     = "HasOne"
 	HasMany    = "HasMany"
 	DataTable  = "DataTable"
+	File       = "File"
+	Image      = "Image"
 )

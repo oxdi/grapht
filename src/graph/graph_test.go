@@ -116,10 +116,9 @@ func TestDuplicateHasOneConnectionIsIgnored(t *testing.T) {
 		ID: "2",
 	})
 	cfg := EdgeConfig{
-		From:   "1",
-		To:     "2",
-		HasOne: true,
-		Name:   "link",
+		From: "1",
+		To:   "2",
+		Name: "link",
 	}
 	g = g.Connect(cfg)
 	g = g.Connect(cfg)
@@ -163,22 +162,25 @@ func TestHasOneConnection(t *testing.T) {
 		ID: "bob",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "alice",
-		To:     "bob",
-		HasOne: true,
-		Name:   "friend",
+		From: "alice",
+		To:   "bob",
+		Name: "friend",
 	})
 	expect(len(g.Get("alice").Out())).ToEqual(1)
 	expect(g.Get("alice").Out()[0].Node().ID()).ToEqual("bob")
 	// ...now connect alice -> jeff
+	g = g.Disconnect(EdgeMatch{
+		From: "alice",
+		To:   "bob",
+		Name: "friend",
+	})
 	g = g.Set(NodeConfig{
 		ID: "jeff",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "alice",
-		To:     "jeff",
-		HasOne: true,
-		Name:   "friend",
+		From: "alice",
+		To:   "jeff",
+		Name: "friend",
 	})
 	expect(len(g.Get("alice").Out())).ToEqual(1)
 	expect(g.Get("alice").Out()[0].Node().ID()).ToEqual("jeff")
@@ -234,24 +236,21 @@ func TestDisconnectSource(t *testing.T) {
 		ID: "3",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "1",
-		To:     "2",
-		HasOne: true,
-		Name:   "linkA",
+		From: "1",
+		To:   "2",
+		Name: "linkA",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "1",
-		To:     "3",
-		HasOne: true,
-		Name:   "linkB",
+		From: "1",
+		To:   "3",
+		Name: "linkB",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "2",
-		To:     "3",
-		HasOne: true,
-		Name:   "linkC",
+		From: "2",
+		To:   "3",
+		Name: "linkC",
 	})
-	g = g.Disconnect(EdgeConfig{
+	g = g.Disconnect(EdgeMatch{
 		From: "1",
 	})
 	expect := testutil.Expect(t)
@@ -278,13 +277,13 @@ func TestDisconnectByNameAndSource(t *testing.T) {
 		To:   "2",
 		Name: "linkB",
 	})
-	g = g.Disconnect(EdgeConfig{
+	g = g.Disconnect(EdgeMatch{
 		From: "1",
 		Name: "NON-EXISTANT-NAME",
 	})
 	expect := testutil.Expect(t)
 	expect(len(g.Get("1").Out())).ToEqual(2)
-	g = g.Disconnect(EdgeConfig{
+	g = g.Disconnect(EdgeMatch{
 		From: "1",
 		Name: "linkA",
 	})
@@ -301,20 +300,18 @@ func TestHasOneConnectionDoesNotModifyOld(t *testing.T) {
 		ID: "bob",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "alice",
-		To:     "bob",
-		HasOne: true,
-		Name:   "friend",
+		From: "alice",
+		To:   "bob",
+		Name: "friend",
 	})
 	// ...now connect alice -> jeff
 	g = g.Set(NodeConfig{
 		ID: "jeff",
 	})
 	_ = g.Connect(EdgeConfig{
-		From:   "alice",
-		To:     "jeff",
-		HasOne: true,
-		Name:   "friend",
+		From: "alice",
+		To:   "jeff",
+		Name: "friend",
 	})
 	expect(len(g.Get("alice").Out())).ToEqual(1)
 	expect(g.Get("alice").Out()[0].Node().ID()).ToEqual("bob")
@@ -329,10 +326,9 @@ func TestCascadingDelete(t *testing.T) {
 		ID: "category",
 	})
 	g = g.Connect(EdgeConfig{
-		From:   "category",
-		To:     "jeff",
-		HasOne: true,
-		Name:   "author",
+		From: "category",
+		To:   "jeff",
+		Name: "author",
 	})
 	g = g.Set(NodeConfig{
 		ID: "product1",

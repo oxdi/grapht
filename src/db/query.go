@@ -144,7 +144,7 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 			},
 			"value": &graphql.Field{
 				Type:        graphql.String,
-				Description: "json encoded attr value",
+				Description: "attr value in string form",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
@@ -513,21 +513,23 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 			}
 			switch f.Type {
 			case graph.HasOne:
-				node := n.Out(f.Edge).Nodes().First()
+				var edgeNames []string
+				if f.Edge != "" {
+					edgeNames = append(edgeNames, f.Edge)
+				}
+				node := n.Out(edgeNames...).Nodes().First()
 				if node == nil {
 					return nil, nil
 				}
 				return node, nil
 			case graph.HasMany:
-				return n.In(f.Edge).Nodes(), nil
-			default:
-				encodedValue := n.Attr(f.Name)
-				if encodedValue == "" || encodedValue == "null" {
-					return nil, nil
+				var edgeNames []string
+				if f.Edge != "" {
+					edgeNames = append(edgeNames, f.Edge)
 				}
-				var v interface{}
-				err := json.Unmarshal([]byte(encodedValue), &v)
-				return v, err
+				return n.In(edgeNames...).Nodes(), nil
+			default:
+				return n.Attr(f.Name), nil
 			}
 		},
 	}

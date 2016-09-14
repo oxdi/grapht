@@ -35,30 +35,46 @@ func authenticate(uid, password, aid string) (string, string, *db.DB, error) {
 		return "", "", nil, fmt.Errorf("invalid app id")
 	}
 	// get user node
-	// c := db.NewConnection("")
-	// defer c.Close()
-	// results := c.QueryWithParams(`node(id:$id){id,password}`, map[string]interface{}{
-	// 	"id": uid,
-	// })
-	// if len(results.Errors) > 0 {
-	// 	return "", "", nil, results.Errors[0]
-	// }
-	// data, ok := results.Data.(map[string]interface{})
-	// if !ok {
-	// 	return "", "", nil, fmt.Errorf("failed to get user")
-	// }
-	// node, ok := data["node"].(map[string]interface{})
-	// if !ok {
-	// 	return "", "", nil, fmt.Errorf("failed to get user")
-	// }
-	// hashedPassword, ok := node["password"]
-	// if !ok {
-	// 	return "", "", nil, fmt.Errorf("failed to get user password")
-	// }
-	// // Check password
-	// if password != hashedPassword {
-	// 	return "", "", nil, fmt.Errorf("invalid password")
-	// }
+	c := db.NewConnection("")
+	defer c.Close()
+	results := c.QueryWithParams(`
+		query Q($id:ID!){
+			node(id:$id){
+				...on User {
+					id
+					password
+				}
+			}
+		}
+	`, map[string]interface{}{
+		"id": uid,
+	})
+	if len(results.Errors) > 0 {
+		return "", "", nil, results.Errors[0]
+	}
+	data, ok := results.Data.(map[string]interface{})
+	if !ok {
+		return "", "", nil, fmt.Errorf("failed to get user")
+	}
+	node, ok := data["node"].(map[string]interface{})
+	if !ok {
+		return "", "", nil, fmt.Errorf("failed to get user")
+	}
+	username, ok := node["id"]
+	if !ok {
+		return "", "", nil, fmt.Errorf("failed to get user id")
+	}
+	if username != uid {
+		return "", "", nil, fmt.Errorf("failed to get correct user node")
+	}
+	hashedPassword, ok := node["password"]
+	if !ok {
+		return "", "", nil, fmt.Errorf("failed to get user password")
+	}
+	// Check password
+	if password != hashedPassword {
+		return "", "", nil, fmt.Errorf("invalid password")
+	}
 	// Create token
 	t, err := createToken(uid, aid)
 	if err != nil {

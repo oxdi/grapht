@@ -291,9 +291,13 @@ Connection.prototype.setNode = function(args, returning){
 	// serialize values to attrs
 	if( args.values ){
 		for( var k in args.values ){
+			var v = args.values[k];
+			if( v.toString ){
+				v = v.toString();
+			}
 			node.attrs.push({
 				name: k,
-				value: JSON.stringify(args.values[k]),
+				value: v,
 			});
 		}
 	}

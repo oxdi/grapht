@@ -25,18 +25,57 @@ test("create a database", function(t){
 		t.ok(c.cfg.token);
 		conn = c;
 		return conn.query(`
+			user:node(id:"admin") {
+				id
+			}
 			types {
 				name
+				fields {
+					name
+					type
+				}
 			}
 		`);
 	})
 	.then(function(res){
 		t.same(res, {
+			user: {
+				id: "admin"
+			},
 			types: [
-				{name:"User"}
+				{name:"User", fields: [
+					{name:"email", type:"Text"},
+					{name:"password", type:"Text"},
+				]}
 			]
 		});
 	})
+})
+
+test("fail to connect to database using invalid user", function(t){
+	return Grapht.connect({
+		host: host,
+		username: "adminnnn",
+		password: "p4sswerd%",
+		appID: appID
+	}).then(function(c){
+		t.fail('should have rejected invalid user/pass');
+	}).catch(function(err){
+		t.ok(err);
+	});
+})
+
+test("fail to connect to database using invalid pass", function(t){
+	return Grapht.connect({
+		host: host,
+		username: "admin",
+		password: "p4ssw",
+		appID: appID
+	}).then(function(c){
+		t.fail('should have rejected invalid user/pass');
+	}).catch(function(err){
+		t.ok(err);
+	});
 })
 
 test("connect to database using user/pass", function(t){
@@ -298,7 +337,7 @@ test("create a Cheese tag", function(t){
 		return t.same(res, {
 			id: "cheese-tag",
 			attrs: [
-				{name:"name", value: JSON.stringify("CHEESE")}
+				{name:"name", value: "CHEESE"}
 			]
 		})
 	})
