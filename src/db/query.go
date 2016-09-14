@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"graph"
 	"reflect"
+	"strings"
 
 	"github.com/graphql-go/graphql"
 )
@@ -61,6 +62,7 @@ type GraphqlContext struct {
 	fieldDefinitionObject *graphql.Object
 	typeDefinitionObject  *graphql.Object
 	attrObject            *graphql.Object
+	imageObject           *graphql.Object
 	edgeObject            *graphql.Object
 	nodeInterface         *graphql.Interface
 	typeEnum              *graphql.Enum
@@ -119,9 +121,82 @@ func (cxt *GraphqlContext) ValueTypeEnum() *graphql.Enum {
 			string(graph.HasMany): &graphql.EnumValueConfig{
 				Description: "Traditional has-many style relationship to other nodes",
 			},
+			string(graph.Image): &graphql.EnumValueConfig{
+				Description: "Image data field",
+			},
+			string(graph.File): &graphql.EnumValueConfig{
+				Description: "File attachment data field",
+			},
 		},
 	})
 
+}
+
+func (cxt *GraphqlContext) ImageObject() *graphql.Object {
+	if cxt.imageObject != nil {
+		return cxt.imageObject
+	}
+	cxt.imageObject = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Img",
+		Fields: graphql.Fields{
+			"url": &graphql.Field{
+				Args: graphql.FieldConfigArgument{
+					"scheme": &graphql.ArgumentConfig{
+						Type: graphql.NewEnum(graphql.EnumConfig{
+							Name:        "SchemeEnum",
+							Description: "url scheme",
+							Values: graphql.EnumValueConfigMap{
+								"DATA": &graphql.EnumValueConfig{
+									Description: "data-uri url",
+								},
+								"HTTP": &graphql.EnumValueConfig{
+									Description: "scheme relative http url",
+								},
+							},
+						}),
+					},
+				},
+				Type:        graphql.String,
+				Description: "url to image (defaults to data-uri)",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					args := struct {
+						Scheme string
+					}{}
+					if err := fill(&args, p.Args); err != nil {
+						return nil, err
+					}
+					data, ok := p.Source.(string)
+					if !ok {
+						return nil, castError("url", p.Source, "string")
+					}
+					if args.Scheme == "HTTP" {
+						return "//fixme.com/image.jpg", nil
+					}
+					return "data:" + data, nil
+				},
+			},
+			"contentType": &graphql.Field{
+				Type:        graphql.String,
+				Description: "content type of image",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					data, ok := p.Source.(string)
+					if !ok {
+						return nil, castError("url", p.Source, "string")
+					}
+					parts := strings.Split(data, ",")
+					if len(parts) == 0 {
+						return nil, nil
+					}
+					parts = strings.Split(parts[0], ";")
+					if len(parts) == 0 {
+						return nil, nil
+					}
+					return parts[0], nil
+				},
+			},
+		},
+	})
+	return cxt.imageObject
 }
 
 func (cxt *GraphqlContext) AttrObject() *graphql.Object {
@@ -467,6 +542,8 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 		return graphql.Float
 	case graph.Boolean:
 		return graphql.Boolean
+	case graph.Image:
+		return cxt.ImageObject()
 	case graph.HasOne:
 		if fd.ToType != "" {
 			t := cxt.conn.g.Type(fd.ToType)
@@ -499,7 +576,48 @@ func (cxt *GraphqlContext) ArgType(fd *graph.Field) graphql.Output {
 	}
 }
 
+func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
+	return &graphql.Field{
+		Args: graphql.FieldConfigArgument{
+			"width": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+			"height": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+		},
+		Type:        cxt.ImageObject(),
+		Description: f.Description,
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			n, ok := p.Source.(*graph.Node)
+			if !ok {
+				return nil, fmt.Errorf("failed to get field %s invalid node source: %v", f.Name, p.Source)
+			}
+			if n == nil {
+				return nil, nilSourceError(f.Name, "<unknown>")
+			}
+			cfg := ResizeConfig{}
+			if err := fill(&cfg, p.Args); err != nil {
+				return nil, err
+			}
+			data := n.Attr(f.Name)
+			if cfg.Width != 0 || cfg.Height != 0 {
+				img, err := decodeImageDataURI(data)
+				if err != nil {
+					return nil, err
+				}
+				img = resizeImage(img, &cfg)
+				return encodeImageDataURI(img)
+			}
+			return data, nil
+		},
+	}
+}
+
 func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
+	if f.Type == graph.Image {
+		return cxt.ImageField(f)
+	}
 	return &graphql.Field{
 		Type:        cxt.ValueType(f),
 		Description: f.Description,

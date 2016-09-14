@@ -11,8 +11,8 @@ bin/grapht: $(GO_SRC_FILES)
 	$(GO) build -o $@ grapht
 
 test: bin/grapht
-	$(GO) test -v graph
-	$(GO) test -v db
+	# $(GO) test -v graph
+	# $(GO) test -v db
 	(cd src/js/grapht && ./test/runner.sh)
 
 clean:
