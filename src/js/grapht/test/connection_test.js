@@ -6,8 +6,8 @@ var Grapht = require('../index.js');
 
 var host = "localhost:8282";
 var appID = "jstest";
-var conn;
-var conn2;
+var admin;
+var guest;
 
 
 
@@ -26,8 +26,8 @@ test("create a database", function(t){
 		t.ok(c,'expected register to return connection');
 		t.ok(c.cfg);
 		t.ok(c.cfg.token);
-		conn = c;
-		return conn.query(`
+		admin = c;
+		return admin.query(`
 			user:node(id:"admin") {
 				id
 			}
@@ -81,20 +81,20 @@ test("fail to connect to database using invalid pass", function(t){
 	});
 })
 
-test("connect to database using user/pass", function(t){
+test("connect to database using guest user/pass", function(t){
 	return Grapht.connect({
 		host: host,
-		username: "admin",
-		password: "p4sswerd%",
+		username: "guest",
+		password: "guest",
 		appID: appID
 	}).then(function(c){
 		t.ok(c.cfg.token);
-		conn2 = c;
+		guest = c;
 	})
 })
 
 test("create an Author type", function(t){
-	return conn.setType({
+	return admin.setType({
 		name:"Author",
 		fields:[
 			{name:"name",type:"Text"},
@@ -126,7 +126,7 @@ test("create an Author type", function(t){
 });
 
 test("create a Post type", function(t){
-	return conn.setType({
+	return admin.setType({
 		name:"Post",
 		fields:[
 			{name:"title",type:"Text"},
@@ -160,7 +160,7 @@ test("create a Post type", function(t){
 });
 
 test("create a Tag type", function(t){
-	return conn.setType({
+	return admin.setType({
 		name:"Tag",
 		fields:[
 			{name:"name",type:"Text"},
@@ -175,7 +175,7 @@ test("create a Tag type", function(t){
 });
 
 test("create an Author node called alice", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"alice",
 		type:"Author",
 	},`
@@ -195,7 +195,7 @@ test("create an Author node called alice", function(t){
 });
 
 test("give alice a full name, age, height and admin flag", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"alice",
 		type:"Author",
 		values: {
@@ -223,7 +223,7 @@ test("give alice a full name, age, height and admin flag", function(t){
 });
 
 test("create an Author node called bob", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"bob",
 		type:"Author",
 		values: {
@@ -238,7 +238,7 @@ test("create an Author node called bob", function(t){
 });
 
 test("create a Post about cheddar", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"cheddar-post",
 		type:"Post",
 		values: {
@@ -262,7 +262,7 @@ test("create a Post about cheddar", function(t){
 });
 
 test("create an Post about stilton", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"stilton-post",
 		type:"Post",
 		values: {
@@ -283,7 +283,7 @@ test("create an Post about stilton", function(t){
 });
 
 test("connect alice to cheddar-post as author", function(t){
-	return conn.setEdge({
+	return admin.setEdge({
 		from: "cheddar-post",
 		to: "alice",
 		name: "author"
@@ -298,7 +298,7 @@ test("connect alice to cheddar-post as author", function(t){
 });
 
 test("connect alice to stilton-post as author", function(t){
-	return conn.setEdge({
+	return admin.setEdge({
 		from: "stilton-post",
 		to: "alice",
 		name: "author"
@@ -325,7 +325,7 @@ test("connect alice to stilton-post as author", function(t){
 });
 
 test("create a Cheese tag", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id:"cheese-tag",
 		type:"Tag",
 		values: {
@@ -349,7 +349,7 @@ test("create a Cheese tag", function(t){
 });
 
 test("fetch cheddar-post with author", function(t){
-	return conn.query(`
+	return admin.query(`
 		post:node(id:"cheddar-post") {
 			id
 			...on Post {
@@ -384,7 +384,7 @@ test("fetch cheddar-post with author", function(t){
 });
 
 test("fetch alice's posts (reverse of HasOne)", function(t){
-	return conn.query(`
+	return admin.query(`
 		alice:node(id:"alice") {
 			posts:in(name:"author") {
 				...on Post {
@@ -407,7 +407,7 @@ test("fetch alice's posts (reverse of HasOne)", function(t){
 });
 
 test("list all nodes", function(t){
-	return conn.query(`
+	return admin.query(`
 		nodes {
 			id
 		}
@@ -428,7 +428,7 @@ test("list all nodes", function(t){
 });
 
 test("filter nodes by single type", function(t){
-	return conn.query(`
+	return admin.query(`
 		nodes(type:Author) {
 			id
 		}
@@ -444,7 +444,7 @@ test("filter nodes by single type", function(t){
 });
 
 test("filter nodes by single type using variable", function(t){
-	return conn.query(`
+	return admin.query(`
 		query Q($kind:[TypeEnum]) {
 			nodes(type:$kind) {
 				id
@@ -463,7 +463,7 @@ test("filter nodes by single type using variable", function(t){
 });
 
 test("filter nodes by multiple types", function(t){
-	return conn.query(`
+	return admin.query(`
 		nodes(type:[Post,Tag]) {
 			id
 		}
@@ -480,7 +480,7 @@ test("filter nodes by multiple types", function(t){
 });
 
 test("set image on cheddar-post", function(t){
-	return conn.setNode({
+	return admin.setNode({
 		id: "cheddar-post",
 		type: "Post",
 		values: {
@@ -490,7 +490,7 @@ test("set image on cheddar-post", function(t){
 });
 
 test("fetch image url (data-uri by default)", function(t){
-	return conn.query(`
+	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
 				image {
@@ -511,7 +511,7 @@ test("fetch image url (data-uri by default)", function(t){
 });
 
 test("fetch image url and contentType", function(t){
-	return conn.query(`
+	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
 				image {
@@ -534,7 +534,7 @@ test("fetch image url and contentType", function(t){
 });
 
 test("fetch image as regular (scheme:HTTP)", function(t){
-	return conn.query(`
+	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
 				image {
@@ -555,7 +555,7 @@ test("fetch image as regular (scheme:HTTP)", function(t){
 });
 
 test("resize image (default: fill with jpeg output format)", function(t){
-	return conn.query(`
+	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
 				image(width:50, height:50) {
@@ -579,7 +579,7 @@ test("resize image (default: fill with jpeg output format)", function(t){
 
 
 test("disconnect alice as author of cheddar-post", function(t){
-	return conn.removeEdges({
+	return admin.removeEdges({
 		from: "cheddar-post",
 		to: "alice",
 		name: "author"
@@ -596,7 +596,7 @@ test("disconnect alice as author of cheddar-post", function(t){
 })
 
 test("check alice not author of cheddar-post anymore ", function(t){
-	return conn.query(`
+	return admin.query(`
 		node(id:"cheddar-post") {
 			...on Post {
 				author {
@@ -611,7 +611,7 @@ test("check alice not author of cheddar-post anymore ", function(t){
 });
 
 test("remove Author Alice", function(t){
-	return conn.removeNodes({
+	return admin.removeNodes({
 		id:"alice",
 	})
 	.then(function(res){
@@ -620,7 +620,7 @@ test("remove Author Alice", function(t){
 })
 
 test("check alice was deleted", function(t){
-	return conn.query(`
+	return admin.query(`
 		node(id:"alice") {
 			id
 		}
@@ -630,8 +630,8 @@ test("check alice was deleted", function(t){
 	})
 });
 
-test("conn2 should be unaffected so far", function(t){
-	return conn2.query(`
+test("guest connection should be unaffected so far", function(t){
+	return guest.query(`
 		nodes {
 			id
 		}
@@ -649,13 +649,45 @@ test("conn2 should be unaffected so far", function(t){
 	})
 });
 
-test("commit changes", function(t){
-	return conn.commit()
+test.skip("reconnecting admin should keep connection state", function(t){
+	return admin.close()
+		.then(function(){
+			return admin.connect({
+				host: host,
+				username: "admin",
+				password: "p4sswerd%",
+				appID: appID
+			})
+		})
+		.then(function(conn){
+			admin = conn;
+			return conn.query(`
+				nodes {
+					id
+				}
+			`)
+		})
+		.then(function(res){
+			t.same(res, {
+				nodes:[
+					{id: "guest"},
+					{id: "admin"},
+					{id:"bob"},
+					{id:"stilton-post"},
+					{id:"cheese-tag"},
+					{id:"cheddar-post"},
+				],
+			});
+		});
+});
+
+test("commit admin changes", function(t){
+	return admin.commit()
 });
 
 
-test("conn2 should now reflect all changes", function(t){
-	return conn2.query(`
+test("guest connection  should now reflect all changes", function(t){
+	return guest.query(`
 		nodes {
 			id
 		}
@@ -686,7 +718,7 @@ test("conn2 should now reflect all changes", function(t){
 test("subscribed query should update after setNode", function(t){
 	return new Promise(function(resolve){
 		var state = {dataCount: 0};
-		var query = conn.subscribe(`
+		var query = admin.subscribe(`
 			nodes(type:Tag){
 				...on Tag {
 					name
@@ -702,7 +734,7 @@ test("subscribed query should update after setNode", function(t){
 						{name: "CHEESE"}
 					]
 				});
-				conn.setNode({
+				admin.setNode({
 					id: "cheese-tag",
 					type: "Tag",
 					values: {
@@ -732,10 +764,10 @@ test("subscribed query should update after setNode", function(t){
 	})
 })
 
-test("subscription should update on conn2.commit", function(t){
+test("subscription should update on guest.commit", function(t){
 	return new Promise(function(resolve){
 		var state = {dataCount: 0};
-		var query = conn.subscribe(`
+		var query = admin.subscribe(`
 			nodes(type:Tag){
 				...on Tag {
 					name
@@ -751,14 +783,14 @@ test("subscription should update on conn2.commit", function(t){
 						{name: "CHEESEY"}
 					]
 				});
-				conn2.setNode({
+				guest.setNode({
 					id: "cheese-tag",
 					type: "Tag",
 					values: {
 						name: "cheese"
 					}
 				}).then(function(){
-					return conn2.commit();
+					return guest.commit();
 				}).catch(t.threw)
 				break;
 			case 2:

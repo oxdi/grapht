@@ -292,9 +292,9 @@ func connect() websocket.Handler {
 			if c.db != nil {
 				// c.db.Close()
 			}
-			fmt.Println("DISCONNECTED")
+			fmt.Println("SOCKET DISCONNECTED")
 		}()
-		fmt.Println("CONNECTED")
+		fmt.Println("SOCKET CONNECTED")
 		for {
 			var data string
 			if err := websocket.Message.Receive(ws, &data); err != nil {
@@ -345,7 +345,9 @@ func createDB(c echo.Context) error {
 				name
 			}
 		`, `
-			set(id:"guest",type:"User"){
+			set(id:"guest", type: "User", attrs: [
+				{name:"password", value:"guest"}
+			]) {
 				id
 			}
 		`, fmt.Sprintf(`

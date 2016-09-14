@@ -962,16 +962,17 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 			if t == nil {
 				return nil, fmt.Errorf("type %s is not defined", cfg.Type)
 			}
-			fieldExists := func(name string) bool {
+			getField := func(name string) *graph.Field {
 				for _, field := range t.Fields {
 					if field.Name == name {
-						return true
+						return field
 					}
 				}
-				return false
+				return nil
 			}
 			for _, attr := range cfg.Attrs {
-				if !fieldExists(attr.Name) {
+				f := getField(attr.Name)
+				if f == nil {
 					return nil, fmt.Errorf("cannot set attr %s type %s does not define a field called %s", attr.Name, t.Name, attr.Name)
 				}
 			}

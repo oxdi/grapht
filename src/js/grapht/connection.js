@@ -37,6 +37,7 @@ Connection.prototype.connect = function(){
 				ws.onopen = function() {
 					conn.log('connection opened');
 					conn.ws = ws;
+					conn.connecting = null;
 					ws.onclose = function() {
 						conn.ws = null;
 						conn.log('connection closed');
@@ -82,10 +83,24 @@ Connection.prototype.onOffline = function(){
 	conn.log('offline');
 }
 
-Connection.prototype.close = function(query,args){
-	if( this.ws ){
-		this.ws.close();
+Connection.prototype.close = function(){
+	var conn = this;
+	var ws = this.ws;
+	if( ws ){
+		return new Promise(function(resolve){
+			ws.onclose = function(){
+				conn.ws = null;
+				resolve('closed');
+			}
+			ws.onerror = function(err){
+				conn.ws = null;
+				resolve(Promise.reject(err));
+			}
+			ws.close();
+			ws.onclose();
+		})
 	}
+	return Promise.resolve('closed');
 }
 
 Connection.prototype.log = function(...args){
