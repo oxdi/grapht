@@ -12,11 +12,8 @@ WebFont.load({
 	},
 });
 
-
-
-let store = new Store({
-	host:'toolbox.oxdi.eu:8282',
-});
+import {Store,register} from 'grapht';
+let store = new Store({});
 
 class App extends React.Component {
 
@@ -24,39 +21,104 @@ class App extends React.Component {
 		router: React.PropTypes.object.isRequired,
 	};
 
-	state = {data: null}
+	state = {data: null, loading: true};
 
-	onData = (data) => {
+	componentDidMount(){
+		if( !this.state.credentials ){
+			let credentials = this.loadCredentials();
+			if( credentials ){
+				this.connect(credentials)
+					.then(() => this.setState({loading:false}))
+					.catch(() => this.setState({loading:false}))
+				return;
+			}
+		}
+		this.setState({loading:false});
+	}
+
+	loadCredentials(){
+		try{
+			let credentials = localStorage.getItem('credentials');
+			if( credentials ){
+				return JSON.parse(credentials);
+			}
+			return null;
+		}catch(err){
+			console.error(err);
+			return null;
+		}
+	}
+
+	onError = (err) => {
+		this.setState({error: err});
+		console.error('onError', err);
+	}
+
+	onQueryData = (data) => {
 		this.setState({data: data});
 	}
 
-	onDataError = (err) => {
-		this.setState({dataError: err});
+	onQueryError = (err) => {
+		this.setState({error: err});
+		console.error('onQueryError', err);
 	}
 
-	onReadyStateChange = (state) => {
-		this.setState({connection: state});
-	}
-
-	componentDidMount(){
-		store.router = this.context.router;
-		store.onAuthStateChange = this.onAuthStateChange
-		store.onConnectionStateChange = this.onConnectionStateChange
-		this.query = store.subscribe(`
-			types {
-				name
-			}
-		`)
-		this.query.on('data', this.onData);
-		this.query.on('error', this.onDataError);
-	}
-
-	componentWillUnmount(){
-		store.router = null;
-		if( this.query ){
-			this.query.unsubscribe();
+	onConnectionStateChange = (online) => {
+		let data = this.state.data;
+		if( !online ){
+			data = null;
 		}
+		this.setState({
+			online,
+			data
+		});
 	}
+
+	onAuthStateChange = (credentials) => {
+		this.setState({credentials: credentials});
+		localStorage.setItem('credentials', JSON.stringify(credentials));
+	}
+
+	register = (details) => {
+		return register(details)
+			.then((credentials) => {
+				this.connect(credentials);
+			})
+			.catch(this.onError)
+	}
+
+	connect = (credentials) => {
+		return store.connect(credentials)
+			.then(() => {
+				this.onAuthStateChange(credentials);
+				this.onConnectionStateChange(true);
+				store.router = this.context.router;
+				store.onAuthStateChange = this.onAuthStateChange
+				store.onConnectionStateChange = this.onConnectionStateChange
+				return store.subscribe('main', `
+					types {
+						name
+					}
+				`)
+			})
+			.then((query) => {
+				query.on('data', this.onQueryData);
+				query.on('error', this.onQueryError);
+			})
+			.catch((err) => {
+				this.onError(err);
+				this.onAuthStateChange(null);
+				this.onConnectionStateChange(false);
+			})
+	}
+
+	logout(){
+		store.close().then(() => {
+			this.setState({credentials: null});
+			localStorage.setItem('credentials', null);
+		})
+	}
+
 
 	sidebarItems(){
 		let router = this.context.router;
@@ -69,6 +131,9 @@ class App extends React.Component {
 		},{
 			primaryText: 'Settings',
 			onClick: () => store.navigate('/settings'),
+		},{
+			primaryText: 'logout',
+			onClick: () => this.logout(),
 		}]
 	}
 
@@ -85,9 +150,25 @@ class App extends React.Component {
 	}
 
 	render(){
-		if( this.state.connection == 
-		if( !this.state.data ){
+		if( this.state.loading ){
 			return <div>loading</div>;
+		}
+		if( !this.state.credentials ){
+			return (
+				<div>
+					<button onClick={() => this.connect({username:"guest",password:"guest",appID:"example"})}>login</button>
+					<button onClick={() => this.register({username:"admin",password:"admin",appID:"example",email:"admin@example.com"})}>register</button>
+				</div>
+			);
+		}
+		if( !this.state.online ){
+			return <div>OFFLINE</div>;
+		}
+		if( !this.state.data ){
+			return <div>NO DATA</div>;
+		}
+		if( !this.props.children ){
+			return <div>NO CHILDREN?</div>;
 		}
 		let section = React.cloneElement(this.props.children, {
 			data: this.state.data,
@@ -119,7 +200,6 @@ const Content = () => (
 const NoMatch = () => (
 	<div>NoMatch</div>
 );
-
 
 render((
 	<Router history={browserHistory}>

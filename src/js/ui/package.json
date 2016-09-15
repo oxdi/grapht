@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "browserify --debug -o dist/bundle.js src/index.js",
-    "watch": "watchify --debug --poll -o dist/bundle.js src/index.js"
+    "watch": "watchify --debug -o dist/bundle.js src/index.js --poll"
   },
   "author": "",
   "license": "ISC",

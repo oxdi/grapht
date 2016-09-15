@@ -1,4 +1,5 @@
 import Query from './query';
+import defaults from './defaults';
 
 const QUERY = "query";
 const EXEC = "exec";
@@ -23,7 +24,7 @@ export default class Connection {
 		this.subscriptions = {};
 		this.n = 0;
 		if( !this.cfg.host ){
-			this.cfg.host = 'toolbox.oxdi.eu:8282';
+			this.cfg.host = defaults.host;
 		}
 	}
 
@@ -41,11 +42,11 @@ export default class Connection {
 			ws.onopen = () => {
 				resolve(ws);
 			}
-			ws.onerror = () => {
+			ws.onerror = (err) => {
 				reject(err);
 			}
 			ws.onclose = () => {
-				this._socket = Promise.reject(new Error('socket closed'));
+				this.socket = () => Promise.reject(new Error('socket closed'));
 				if( this.onClose ){
 					this.onClose();
 				}
@@ -154,6 +155,12 @@ export default class Connection {
 	}
 
 	_subscribe(query){
+		if( !query.id ){
+			return Promise.reject(new Error('subscribe: name is required'));
+		}
+		if( !query.query ){
+			return Promise.reject(new Error('subscribe: query is required'));
+		}
 		return this.send({
 			type:"subscribe",
 			subscription: query.id,

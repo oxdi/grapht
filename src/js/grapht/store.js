@@ -7,18 +7,25 @@ export default class Store {
 		this.credentials = credentials;
 		this.connected = false;
 		this.authenticated = false;
+		this.subscriptions = {};
 	}
 
 	onLostConnection = () => {
-		console.log('connection lost');
 		this.conn = null;
+		if( this.onConnectionStateChange ){
+			this.onConnectionStateChange(false);
+		}
 		setTimeout(() => {
-			console.log('reconnecting');
-			this.connect();
+			this.connect().catch((err) => {
+				console.error('failed to reconnect');
+			})
 		}, 2000);
 	}
 
-	connect(){
+	connect(credentials){
+		if( credentials ){
+			this.credentials = credentials;
+		}
 		if( !this.conn ){
 			if( !this.credentials ){
 				return Promise.reject(new Error('no credentials'));
@@ -28,6 +35,15 @@ export default class Store {
 			});
 			conn.onClose = this.onLostConnection;
 			this.conn = conn.connect(this.credentials)
+				.then((conn) => {
+					for(let id in this.subscriptions){
+						conn._subscribe(this.subscriptions[id]);
+					}
+					if( this.onConnectionStateChange ){
+						this.onConnectionStateChange(true);
+					}
+					return conn;
+				})
 				.catch((err) => {
 					this.conn = null;
 					return Promise.reject(err);
@@ -36,10 +52,17 @@ export default class Store {
 		return Promise.resolve(this.conn);
 	}
 
-	subscribe(){
-		return this.connect().then((conn) => {
-			return conn.subscribe();
-		})
+	subscribe(...args){
+		let conn;
+		return this.connect()
+			.then((c) => {
+				conn = c;
+				return conn.subscribe(...args);
+			})
+			.then((query) => {
+				this.subscriptions = conn.subscriptions;
+				return query;
+			})
 	}
 
 	navigate(path,params){
@@ -47,5 +70,10 @@ export default class Store {
 			return;
 		}
 		this.router.push(path);
+	}
+
+	close(){
+		return this.connect()
+			.then((c) => c.close())
 	}
 }

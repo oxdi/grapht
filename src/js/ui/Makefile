@@ -1,7 +1,9 @@
 
 default: dist/index.html
 
-dist/bundle.js: package.json
+UI_SRC_FILES := $(shell find src -type f)
+
+dist/bundle.js: package.json $(UI_SRC_FILES)
 	mkdir -p dist
 	npm run build
 

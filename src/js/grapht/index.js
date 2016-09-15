@@ -1,9 +1,13 @@
-import Connection from './connection.js';
-import Store from './store.js';
+import Connection from './connection';
+import Store from './store';
+import defaults from './defaults';
 import 'whatwg-fetch';
 
 function register({host,username,email,password,appID}){
-	return fetch(`http://${host}/api/create`, {
+	if( !host ){
+		host = defaults.host;
+	}
+	return fetch(`//${host}/api/create`, {
 		method: 'POST',
 		headers: {
 			'Accept': 'application/json',
@@ -26,7 +30,7 @@ function register({host,username,email,password,appID}){
 		if( !msg.token ){
 			return Promise.reject(new Error('failed to authenticate after create'));
 		}
-		return msg.token;
+		return {token: msg.token};
 	});
 }
 
@@ -35,14 +39,16 @@ function connect(cfg){
 	return store.connect();
 }
 
-export {
-	Store,
-	Connection,
+let Grapht = {
 	register,
 	connect
 }
 
-export default {
+export {
+	Grapht as default,
+	Store,
+	Connection,
 	register,
-	connect
+	connect,
 }
+

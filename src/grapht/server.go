@@ -416,7 +416,7 @@ func StartServer() error {
 	e.POST("/api/create", createDB)
 
 	// admin ui
-	e.GET("/", index)
+	e.GET("/*", index)
 
 	// Restricted routes
 	// api := e.Group("/api")

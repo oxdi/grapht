@@ -22,11 +22,12 @@ test("create a database", function(t){
 			appID: appID,
 		})
 	})
-	.then(function(token){
-		t.ok(token,'expected a token');
+	.then(function(credentials){
+		t.ok(credentials,'expected a credentials object');
+		t.ok(credentials.token,'expected a token');
 		return Grapht.connect({
 			host: host,
-			credentials:{token:token}
+			credentials: credentials
 		});
 	})
 	.then(function(store){
