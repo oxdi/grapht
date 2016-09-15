@@ -22,11 +22,15 @@ test("create a database", function(t){
 			appID: appID,
 		})
 	})
-	.then(function(c){
-		t.ok(c,'expected register to return connection');
-		t.ok(c.cfg);
-		t.ok(c.cfg.token);
-		admin = c;
+	.then(function(token){
+		t.ok(token,'expected a token');
+		return Grapht.connect({
+			host: host,
+			credentials:{token:token}
+		});
+	})
+	.then(function(store){
+		admin = store;
 		return admin.query(`
 			user:node(id:"admin") {
 				id
@@ -58,9 +62,11 @@ test("create a database", function(t){
 test("fail to connect to database using invalid user", function(t){
 	return Grapht.connect({
 		host: host,
-		username: "adminnnn",
-		password: "p4sswerd%",
-		appID: appID
+		credentials: {
+			username: "adminnnn",
+			password: "p4sswerd%",
+			appID: appID
+		}
 	}).then(function(c){
 		t.fail('should have rejected invalid user/pass');
 	}).catch(function(err){
@@ -71,9 +77,11 @@ test("fail to connect to database using invalid user", function(t){
 test("fail to connect to database using invalid pass", function(t){
 	return Grapht.connect({
 		host: host,
-		username: "admin",
-		password: "p4ssw",
-		appID: appID
+		credentials: {
+			username: "admin",
+			password: "p4ssw",
+			appID: appID
+		}
 	}).then(function(c){
 		t.fail('should have rejected invalid user/pass');
 	}).catch(function(err){
@@ -84,9 +92,11 @@ test("fail to connect to database using invalid pass", function(t){
 test("connect to database using guest user/pass", function(t){
 	return Grapht.connect({
 		host: host,
-		username: "guest",
-		password: "guest",
-		appID: appID
+		credentials: {
+			username: "guest",
+			password: "guest",
+			appID: appID
+		}
 	}).then(function(c){
 		t.ok(c.cfg.token);
 		guest = c;
@@ -716,102 +726,100 @@ test("guest connection  should now reflect all changes", function(t){
 
 
 test("subscribed query should update after setNode", function(t){
-	return new Promise(function(resolve){
-		var state = {dataCount: 0};
-		var query = admin.subscribe(`
-			nodes(type:Tag){
-				...on Tag {
-					name
+	return admin.subscribe("main", `
+		nodes(type:Tag){
+			...on Tag {
+				name
+			}
+		}
+	`)
+	.then((query) => {
+		return new Promise(function(resolve){
+			var state = {dataCount: 0};
+			query.on('data', function(data){
+				state.dataCount++;
+				switch(state.dataCount){
+				case 1:
+					t.same(data, {
+						nodes: [
+							{name: "CHEESE"}
+						]
+					});
+					admin.setNode({
+						id: "cheese-tag",
+						type: "Tag",
+						values: {
+							name: "CHEESEY"
+						}
+					}).catch(t.threw)
+					break;
+				case 2:
+					t.same(data, {
+						nodes: [
+							{name: "CHEESEY"}
+						]
+					});
+					t.equal(state.dataCount, 2);
+					resolve(true);
+					break;
+				default:
+					resolve(Promise.reject(new Error('received more data than expected')))
 				}
-			}
-		`);
-		query.on('data', function(data){
-			state.dataCount++;
-			switch(state.dataCount){
-			case 1:
-				t.same(data, {
-					nodes: [
-						{name: "CHEESE"}
-					]
-				});
-				admin.setNode({
-					id: "cheese-tag",
-					type: "Tag",
-					values: {
-						name: "CHEESEY"
-					}
-				}).catch(t.threw)
-				break;
-			case 2:
-				t.same(data, {
-					nodes: [
-						{name: "CHEESEY"}
-					]
-				});
-				query.unsubscribe();
-				break;
-			default:
-				resolve(Promise.reject(new Error('received more data than expected')))
-			}
-		});
-		query.on('error', function(err){
-			resolve(Promise.reject(new Error(err)))
-		});
-		query.on('unsubscribe', function(){
-			t.equal(state.dataCount, 2);
-			resolve(true);
-		});
+			});
+			query.on('error', function(err){
+				resolve(Promise.reject(new Error(err)))
+			});
+		})
 	})
 })
 
 test("subscription should update on guest.commit", function(t){
-	return new Promise(function(resolve){
-		var state = {dataCount: 0};
-		var query = admin.subscribe(`
-			nodes(type:Tag){
-				...on Tag {
-					name
+	var state = {dataCount: 0};
+	return admin.subscribe("main", `
+		nodes(type:Tag){
+			...on Tag {
+				name
+			}
+		}
+	`)
+	.then((query) => {
+		return new Promise(function(resolve){
+			query.on('data', function(data){
+				state.dataCount++;
+				switch(state.dataCount){
+				case 1:
+					t.same(data, {
+						nodes: [
+							{name: "CHEESEY"}
+						]
+					});
+					guest.setNode({
+						id: "cheese-tag",
+						type: "Tag",
+						values: {
+							name: "cheese"
+						}
+					}).then(function(){
+						return guest.commit();
+					}).catch(t.threw)
+					break;
+				case 2:
+					t.same(data, {
+						nodes: [
+							{name: "cheese"}
+						]
+					});
+					resolve(true);
+					break;
+				default:
+					resolve(Promise.reject(new Error('received more data than expected')))
 				}
-			}
-		`);
-		query.on('data', function(data){
-			state.dataCount++;
-			switch(state.dataCount){
-			case 1:
-				t.same(data, {
-					nodes: [
-						{name: "CHEESEY"}
-					]
-				});
-				guest.setNode({
-					id: "cheese-tag",
-					type: "Tag",
-					values: {
-						name: "cheese"
-					}
-				}).then(function(){
-					return guest.commit();
-				}).catch(t.threw)
-				break;
-			case 2:
-				t.same(data, {
-					nodes: [
-						{name: "cheese"}
-					]
-				});
-				query.unsubscribe();
-				break;
-			default:
-				resolve(Promise.reject(new Error('received more data than expected')))
-			}
-		});
-		query.on('error', function(err){
-			t.equal(state.dataCount, 2);
-			resolve(Promise.reject(new Error(err)))
-		});
-		query.on('unsubscribe', function(){
-			resolve(true);
-		});
+			});
+			query.on('error', function(err){
+				t.equal(state.dataCount, 2);
+				resolve(Promise.reject(new Error(err)))
+			});
+		})
 	})
 
 })

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"db"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -380,6 +383,23 @@ func createDB(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
+func index(c echo.Context) error {
+	data, err := Asset("index.html.gz")
+	if err != nil {
+		return err
+	}
+	res := c.Response()
+	h := res.Header()
+	h.Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	h.Set(echo.HeaderContentEncoding, "gzip")
+	h.Set(echo.HeaderContentLength, strconv.Itoa(len(data)))
+	res.WriteHeader(http.StatusOK)
+	r := bytes.NewReader(data)
+	w := res.Writer()
+	_, err = io.Copy(w, r)
+	return err
+}
+
 func StartServer() error {
 	e := echo.New()
 	e.Use(middleware.CORS())
@@ -394,6 +414,9 @@ func StartServer() error {
 
 	// signup handler
 	e.POST("/api/create", createDB)
+
+	// admin ui
+	e.GET("/", index)
 
 	// Restricted routes
 	// api := e.Group("/api")

@@ -12,20 +12,16 @@ WebFont.load({
 	},
 });
 
-import Grapht from 'grapht'
-let store = Grapht.connect({appID:"example"});
-window.store = store;
-store.navigate = function(path,params){
-	if( !store.router ){
-		return;
-	}
-	store.router.push(path);
-}
+
+
+let store = new Store({
+	host:'toolbox.oxdi.eu:8282',
+});
 
 class App extends React.Component {
 
 	static contextTypes = {
-		router: React.PropTypes.object.isRequired
+		router: React.PropTypes.object.isRequired,
 	};
 
 	state = {data: null}
@@ -38,18 +34,14 @@ class App extends React.Component {
 		this.setState({dataError: err});
 	}
 
-	onOnline = (err) => {
-		this.setState({online: true});
-	}
-
-	onOffline = (err) => {
-		this.setState({online: false});
+	onReadyStateChange = (state) => {
+		this.setState({connection: state});
 	}
 
 	componentDidMount(){
-		store.onOnline = this.onOnline;
-		store.onOffline = this.onOffline;
 		store.router = this.context.router;
+		store.onAuthStateChange = this.onAuthStateChange
+		store.onConnectionStateChange = this.onConnectionStateChange
 		this.query = store.subscribe(`
 			types {
 				name
@@ -60,20 +52,23 @@ class App extends React.Component {
 	}
 
 	componentWillUnmount(){
-		this.query.unsubscribe();
+		store.router = null;
+		if( this.query ){
+			this.query.unsubscribe();
+		}
 	}
 
 	sidebarItems(){
 		let router = this.context.router;
 		return [{
 			primaryText: 'Types',
-			onClick: () => router.push('/types'),
+			onClick: () => store.navigate('/types'),
 		},{
 			primaryText: 'Content',
-			onClick: () => router.push('/content'),
+			onClick: () => store.navigate('/content'),
 		},{
 			primaryText: 'Settings',
-			onClick: () => router.push('/settings'),
+			onClick: () => store.navigate('/settings'),
 		}]
 	}
 
@@ -90,6 +85,7 @@ class App extends React.Component {
 	}
 
 	render(){
+		if( this.state.connection == 
 		if( !this.state.data ){
 			return <div>loading</div>;
 		}
@@ -123,6 +119,7 @@ const Content = () => (
 const NoMatch = () => (
 	<div>NoMatch</div>
 );
+
 
 render((
 	<Router history={browserHistory}>

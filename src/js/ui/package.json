@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "browserify --debug -o dist/bundle.js src/index.js",
+    "watch": "watchify --debug --poll -o dist/bundle.js src/index.js"
   },
   "author": "",
   "license": "ISC",
@@ -30,6 +31,8 @@
     "postcss-scss": "^0.3.0",
     "sassify": "^2.0.0",
     "tape-run": "^2.1.4",
+    "uglify": "^0.1.5",
+    "uglifyify": "^3.0.3",
     "watchify": "^3.7.0",
     "webfontloader": "^1.6.26",
     "webpack": "^1.13.2"

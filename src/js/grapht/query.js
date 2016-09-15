@@ -1,69 +1,39 @@
 
-function Query(cfg){
-	this.cfg = cfg;
-	this.onData = function(){}
-	this.onError = function(){}
-	this.onUnsubscribe = function(){}
-}
+export default class Query {
 
-Query.prototype.on = function(evt, fn){
-	switch(evt){
-	case "data":
-		this.onData = fn;
-		break;
-	case "error":
-		this.onError = fn;
-		break;
-	case "unsubscribe":
-		this.onUnsubscribe = fn;
-		break;
-	default:
-		throw new Error('unknown event name: '+evt);
+	constructor(name, query,params){
+		this.id = name;
+		this.query = query;
+		this.params = params;
 	}
-}
 
-Query.prototype._onData = function(msg){
-	if( !msg.data ){
-		this.onError(new Error('no result data'));
-	}else if( msg.data.errors && msg.data.errors.length > 0 ){
-		this.onError(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
-	} else {
-		this.onData(msg.data.data);
+	set(query, params){
 	}
-}
 
-Query.prototype.unsubscribe = function(){
-	var query = this;
-	var conn = this.cfg.conn;
-	return conn._send({
-		type:"unsubscribe",
-		subscription: this.cfg.subscription,
-	}).then(function(msg){
-		query.onUnsubscribe();
-	}).catch(function(err){
-		query.onError(err);
-	});
-}
+	on(name, fn){
+		if( name == 'data' ){
+			this.onData = fn;
+		} else if( name == 'error' ){
+			this.onError = fn;
+		}
+	}
 
-Query.prototype.subscribe = function(){
-	var query = this;
-	var conn = this.cfg.conn;
-	return conn._send({
-		type:"subscribe",
-		subscription: query.cfg.subscription,
-		query: `query { ${query.cfg.query} }`,
-		params: query.cfg.params || {},
-	}).then(function(msg){
-		return query;
-	}).catch(function(err){
-		query.onError(err);
-	});
-}
+	_onData(msg){
+		if( !msg.data ){
+			this._onError(new Error('no result data'));
+		}else if( msg.data.errors && msg.data.errors.length > 0 ){
+			this._onError(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
+		} else if( this.onData ){
+			this.onData(msg.data.data);
+		}
+	}
 
-Query.prototype.set = function(query,params){
-	this.cfg.query = query;
-	this.cfg.params = params || {};
-	return this.subscribe();
+	_onError(err){
+		if( this.onError ){
+			this.onError(err);
+		}
+	}
+
 }
 
 module.exports = Query;
