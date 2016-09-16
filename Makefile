@@ -22,8 +22,14 @@ assets/index.html.gz: src/js/ui/dist/index.html bin/go-bindata
 src/grapht/assets_gen.go: assets/index.html.gz
 	./bin/go-bindata -prefix assets/ -nocompress -nomemcopy -pkg main -o $@ assets/
 
-src/js/ui/dist/index.html: $(UI_SRC_FILES)
-	(cd src/js/ui && make)
+src/js/ui/dist/bundle.js: $(UI_SRC_FILES)
+	(cd src/js/ui && make dist/bundle.js)
+
+src/js/ui/dist/index.html: src/js/ui/dist/bundle.js
+	(cd src/js/ui && make dist/index.html)
+
+watch: bin/grapht
+	(cd src/js/ui && npm run watch 2>&1) | node watch.js
 
 test: bin/grapht
 	# $(GO) test -v graph
@@ -36,4 +42,4 @@ clean:
 
 all: bin/grapht
 
-.PHONY: all default clean clean-all test
+.PHONY: all default clean clean-all test watch

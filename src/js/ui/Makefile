@@ -9,7 +9,7 @@ dist/bundle.js: package.json $(UI_SRC_FILES)
 
 dist/bundle.css: src/normalize.css src/react-md.min.css
 	mkdir -p dist
-	cat src/normalize.css src/react-md.min.css >$@
+	cat src/normalize.css node_modules/react-md/dist/react-md.min.css >$@
 
 dist/index.html: src/index.html dist/bundle.js dist/bundle.css
 	mkdir -p dist

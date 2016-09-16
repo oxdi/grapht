@@ -17,7 +17,7 @@ export default class Store {
 		}
 		setTimeout(() => {
 			this.connect().catch((err) => {
-				console.error('failed to reconnect');
+				console.error('failed to reconnect',err);
 			})
 		}, 2000);
 	}
@@ -63,6 +63,16 @@ export default class Store {
 				this.subscriptions = conn.subscriptions;
 				return query;
 			})
+	}
+
+	setType(...args){
+		return this.connect()
+			.then((conn) => conn.setType(...args))
+			.then((res) => this.commit().then(() => res))
+	}
+
+	commit(){
+		return this.connect().then((conn) => conn.commit())
 	}
 
 	navigate(path,params){
