@@ -20,7 +20,7 @@ assets/index.html.gz: src/js/ui/dist/index.html bin/go-bindata
 	gzip -f assets/index.html
 
 src/grapht/assets_gen.go: assets/index.html.gz
-	./bin/go-bindata -prefix assets/ -nocompress -nomemcopy -pkg main -o $@ assets/
+	./bin/go-bindata -prefix assets/ -debug -nocompress -nomemcopy -pkg main -o $@ assets/
 
 src/js/ui/dist/bundle.js: $(UI_SRC_FILES)
 	(cd src/js/ui && make dist/bundle.js)

@@ -71,6 +71,12 @@ export default class Store {
 			.then((res) => this.commit().then(() => res))
 	}
 
+	setNode(...args){
+		return this.connect()
+			.then((conn) => conn.setNode(...args))
+			.then((res) => this.commit().then(() => res))
+	}
+
 	commit(){
 		return this.connect().then((conn) => conn.commit())
 	}

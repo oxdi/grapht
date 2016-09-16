@@ -3,7 +3,7 @@ var spawnSync = require('child_process').spawnSync;
 var spawn = require('child_process').spawn;
 
 function make(){
-	var res = spawnSync('make', {
+	var res = spawnSync('make', ['assets/index.html.gz'], {
 		stdio: 'inherit',
 		shell: true,
 	});
@@ -48,6 +48,10 @@ rl.on('line', function(line){
 			console.log('make failed');
 			return
 		}
-		restartServer()
+		if( !server ){
+			startServer();
+		} else {
+			// restartServer()
+		}
 	}
 })

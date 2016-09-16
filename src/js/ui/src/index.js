@@ -1,7 +1,11 @@
 import React from 'react';
+import {PureComponent,PropTypes} from 'react';
+import CSSTransitionGroup from 'react-addons-css-transition-group';
+import classnames from 'classnames';
 import { render } from 'react-dom';
 import { Router, Route, Link, browserHistory } from 'react-router'
 import WebFont from 'webfontloader';
+import uuid from 'node-uuid';
 
 import UI from 'react-md/lib';
 import {ExpansionPanel, ExpansionList} from 'react-md/lib/ExpansionPanels';
@@ -191,6 +195,9 @@ class App extends React.Component {
 			primaryText: 'Settings',
 			onClick: () => store.navigate('/settings'),
 		},{
+			primaryText: 'Audit Trail',
+			onClick: () => store.navigate('/settings'),
+		},{
 			primaryText: 'logout',
 			onClick: () => this.logout(),
 		}]
@@ -368,21 +375,43 @@ class CreateFieldDialog extends React.Component {
 class CreateContentDialog extends React.Component {
 
 	state = {error: null};
+	constructor(...args){
+		super(...args);
+		this.state = {
+			node: {
+				id: uuid.v4(),
+				values: {},
+			}
+		};
+	}
+
+	set = (k,v) => {
+		let node = this.state.node;
+		node.values[k] = v;
+		this.setState({node: node});
+	}
+
+	setType = (v) => {
+		let node = this.state.node;
+		node.type = v;
+		this.setState({node: node});
+	}
+
+	setID = (v) => {
+		let node = this.state.node;
+		node.id = v;
+		this.setState({node: node});
+	}
 
 	onSubmit = () => {
-		let type = this.props.type;
-		console.log(this.refs);
-		type.fields.push({
-			name: this.refs.name.state.value,
-			type: this.refs.type.state.value,
-		})
-		store.setType(type)
+		store.setNode(this.state.node)
 			.then(this.onCreate)
 			.catch(this.onError)
 	}
 
 	onCreate = () => {
 		store.dialog();
+		store.navigate(`/content/${this.state.node.id}`);
 	}
 
 	onError = (err) => {
@@ -391,7 +420,6 @@ class CreateContentDialog extends React.Component {
 
 	render(){
 		let types = this.props.types;
-		let type = this.props.type;
 		return <UI.Dialog modal isOpen
 			title="Create Content"
 			close={() => console.log('close')}
@@ -410,7 +438,8 @@ class CreateContentDialog extends React.Component {
 					ref="type"
 					label="Type"
 					menuItems={types.map(t => t.name)}
-					itemLabel="type"
+					value={this.state.node.type}
+					onChange={this.setType}
 					adjustMinWidth
 					floatingLabel
 					fullWidth
@@ -418,8 +447,10 @@ class CreateContentDialog extends React.Component {
 			</div>
 			<div>
 				<UI.TextField
-					ref="name"
-					label="Name"
+					ref="id"
+					label="ID"
+					value={this.state.node.id}
+					onChange={this.setID}
 					fullWidth
 					errorText={this.state.error}
 				/>
@@ -538,50 +569,243 @@ const TypesPane = ({params,data,location}) => (
 	</div>
 );
 
-const ContentRow = ({node,onClick}) => (
-	<UI.TableRow onClick={onClick}>
-		<UI.TableColumn>{node.id}</UI.TableColumn>
-		<UI.TableColumn numeric>{node.name || node.title || 'unnamed'}</UI.TableColumn>
-	</UI.TableRow>
-)
-
-const TextField = ({node,field}) => (
-	<div>
+const TextField = ({node,field,value,onChange}) => {
+	return (
 		<UI.TextField
-			ref="name"
 			label={field.name}
-			value={node[field.name]}
+			value={value}
+			onChange={onChange}
 			fullWidth
 			helpText={field.hint}
 		/>
-	</div>
-)
+	)
+}
 
-const Field = ({node,field}) => {
-	let props = {node,field};
-	switch( field.type ){
-	case 'Text':      return <TextField {...props} />;
-	default:          return <div>UNKNOWN FIELD TYPE</div>;
+const BooleanField = ({node,field,value,onChange}) => {
+	const on = value === true ||
+		value === 1 ||
+		(/^(true|yes|y|t|on)$/i).test((value || '').toString());
+	return (
+		<UI.Switch
+			label={field.name}
+			toggled={on}
+			onChange={onChange} />
+	)
+}
+
+class UploadedImageCard extends PureComponent {
+	render() {
+		const title = <UI.CardTitle
+			key="title"
+			title="Image Filename here"
+			subtitle={`Other image info here`}
+		/>
+
+		return <UI.Card>
+			<UI.CardMedia overlay={title}>
+			<UI.IconButton data-name={name} className="close-btn">close</UI.IconButton>
+				<img src={this.props.url} />
+			</UI.CardMedia>
+		</UI.Card>;
 	}
 }
 
-const ContentEditPane = ({params,data,location}) => {
-	let node = data.nodes.filter(t => t.id == params.id)[0];
-	return (
-		<div style={{margin:40}}>
-			<div className="md-card-list">
-				{node.type.fields.map(f => <UI.Card key={`${node.id}__${f.name}`}><Field field={f} node={node} /></UI.Card>)}
+class ImageField extends PureComponent {
+	constructor(...args) {
+		super(...args);
+		this.state = {};
+		this._timeout = null;
+	}
+
+	componentWillUnmount() {
+		this._timeout && clearTimeout(this._timeout);
+	}
+
+	_onLoad = (file, uploadResult) => {
+		const { name, size, type, lastModifiedDate } = file;
+		this.props.onChange(uploadResult);
+
+		this._timeout = setTimeout(() => {
+			this._timeout = null;
+			this.setState({ progress: null });
+		}, 2000);
+
+		this.setState({ file, progress: 100 });
+	};
+
+	_setFile = (file) => {
+		this.setState({ file });
+	};
+
+	_handleProgress = (file, progress) => {
+		// The progress event can sometimes happen once more after the abort
+		// has been called. So this just a sanity check
+		if (this.state.file === file) {
+			this.setState({ progress });
+		}
+	};
+
+	_abortUpload = () => {
+		this.refs.upload.abort();
+		this.setState({ file: null, progress: null });
+	};
+
+
+	render() {
+		let img;
+		if( this.props.value ){
+			img = <UploadedImageCard url={this.props.value} />;
+		}
+
+		let stats;
+		if (typeof progress === 'number') {
+			stats = [
+				<UI.LinearProgress key="progress" value={progress} />,
+				<UI.RaisedButton key="abort" label="Abort Upload" onClick={this._abortUpload} />,
+			];
+		}
+
+		return <div>
+			{stats}
+			<CSSTransitionGroup
+				component="output"
+				className="md-card-list"
+				transitionName="upload"
+				transitionEnterTimeout={150}
+				transitionLeaveTimeout={150}
+				onClick={this._handleListClick}
+			>
+				{img}
+			</CSSTransitionGroup>
+			<UI.FileUpload
+				multiple={false}
+				secondary
+				ref="upload"
+				label="Select image"
+				onLoadStart={this._setFile}
+				onProgress={this._handleProgress}
+				onLoad={this._onLoad}
+			/>
+		</div>;
+	}
+}
+
+class Field extends React.Component {
+	render(){
+		switch( this.props.field.type ){
+		case 'Text':      return <TextField {...this.props} />;
+		case 'Int':       return <TextField {...this.props} type="number" />;
+		case 'Float':     return <TextField {...this.props} type="number" />;
+		case 'Boolean':   return <BooleanField {...this.props} />;
+		case 'Image':     return <ImageField {...this.props} />;
+		// TODO: HasOne, Collections
+		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
+		}
+	}
+}
+
+class ContentEditPane extends React.Component {
+
+	constructor(...args){
+		super(...args);
+		this.node = this.props.data.nodes.filter(t => t.id == this.props.params.id)[0];
+		let fields = this.node.type.fields.reduce((fs, f) => {
+			fs[f.name] = f;
+			return fs;
+		}, {});
+		this.state = {
+			values:	this.node.attrs.reduce((vs,v) => {
+				if( fields[v.name] ){
+					vs[v.name] = v.value
+				}
+				return vs
+			}, {}),
+			dirty: false,
+			errors: [],
+		};
+	}
+
+	set = (field, v) => {
+		let dirty = true;
+		let values = this.state.values;
+		values[field.name] = v;
+		this.setState({values,dirty})
+	}
+	// todo: add ye olde numbers
+	// todo: DataTable
+	// 	-> add/remove cols
+	// 	-> add/remove rows
+	// 	-> array-array-string
+	// 	-> first row is
+	// todo: ALL si units
+	// todo: sidebar only
+	// todo: switch back to encoding image info as json
+	// 	-> filename
+	// 	-> default focus (x/y)
+	// 	-> default resize algo
+
+	onSave = () => {
+		this.setState({errors:null});
+		console.log('saving ...', this.state.values, this.node);
+		store.setNode({
+			id: this.node.id,
+			type: this.node.type.name,
+			values: this.state.values,
+		})
+		.then(this.afterSave)
+		.catch((err) => this.setState({errors:[err.toString()]}));
+	}
+
+	afterSave = () => {
+		this.setState({dirty: false});
+	}
+
+	fieldItems(){
+		let node = this.node;
+		return node.type.fields.map(f => {
+			return <UI.Card key={`${node.id}__${f.name}`}>
+				<div style={{margin:20}}>
+					<Field ref={f.name} field={f} node={node} value={this.state.values[f.name]} onChange={this.set.bind(this,f)} />
+				</div>
+			</UI.Card>
+		})
+	}
+
+	render(){
+		let toasts = (this.state.errors || []).map(e => {
+			return {text: e};
+		})
+		return (
+			<div style={{margin:40}}>
+				<div className="md-card-list">
+					{this.fieldItems()}
+					<UI.Card>
+						<div style={{margin:20}}>
+							<UI.FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this.onSave} />
+						</div>
+					</UI.Card>
+				</div>
+				<UI.Snackbar
+					toasts={toasts}
+					autohide
+					dismiss={() => this.setState({errors:[]})}
+				/>
 			</div>
-			<UI.FloatingButton
-				primary
-				fixed
-				tooltipPosition="top"
-				tooltipLabel="Add Field"
-				onClick={() => store.dialog(<CreateFieldDialog type={type} />)}
-			>add</UI.FloatingButton>
-		</div>
-	);
+		);
+	}
 };
+
+const ContentRow = ({node,onClick}) => {
+	const values = node.attrs.reduce((vs,attr) => {
+		vs[attr.name] = attr.value;
+		return vs;
+	},{})
+	return <UI.TableRow onClick={onClick}>
+		<UI.TableColumn>{node.id}</UI.TableColumn>
+		<UI.TableColumn>{node.type.name}</UI.TableColumn>
+		<UI.TableColumn>{values.name || values.title || 'unnamed'}</UI.TableColumn>
+	</UI.TableRow>;
+}
 
 const ContentPane = ({params,data,location}) => (
 	<div>
@@ -589,6 +813,7 @@ const ContentPane = ({params,data,location}) => (
 			<UI.TableHeader>
 				<UI.TableRow>
 					<UI.TableColumn>ID</UI.TableColumn>
+					<UI.TableColumn>Type</UI.TableColumn>
 					<UI.TableColumn numeric>Name</UI.TableColumn>
 				</UI.TableRow>
 			</UI.TableHeader>
@@ -601,7 +826,7 @@ const ContentPane = ({params,data,location}) => (
 			fixed
 			tooltipPosition="top"
 			tooltipLabel="Add Type"
-			onClick={() => store.dialog()}
+			onClick={() => store.dialog(<CreateContentDialog types={data.types} />)}
 		>add</UI.FloatingButton>
 	</div>
 );
