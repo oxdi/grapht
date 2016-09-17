@@ -28,6 +28,7 @@
     "babelify": "^7.3.0",
     "browserify": "^13.1.0",
     "browserify-postcss": "^0.3.2",
+    "livereactload": "^3.0.0",
     "local-web-server": "^1.2.6",
     "postcss-advanced-variables": "^1.2.2",
     "postcss-import": "^8.1.2",

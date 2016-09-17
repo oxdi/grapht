@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -383,13 +384,25 @@ func createDB(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
-func index(c echo.Context) error {
-	data, err := Asset("index.html.gz")
+func assets(c echo.Context) error {
+	res := c.Response()
+	h := res.Header()
+	// check for asset at path
+	path := strings.Replace(c.Request().URL().Path(), "/", "", 1)
+	data, err := Asset(path)
+	if data != nil {
+		h.Set(echo.HeaderContentLength, strconv.Itoa(len(data)))
+		res.WriteHeader(http.StatusOK)
+		r := bytes.NewReader(data)
+		w := res.Writer()
+		_, err = io.Copy(w, r)
+		return err
+	}
+	// default index handler...
+	data, err = Asset("index.html.gz")
 	if err != nil {
 		return err
 	}
-	res := c.Response()
-	h := res.Header()
 	h.Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
 	h.Set(echo.HeaderContentEncoding, "gzip")
 	h.Set(echo.HeaderContentLength, strconv.Itoa(len(data)))
@@ -416,7 +429,7 @@ func StartServer() error {
 	e.POST("/api/create", createDB)
 
 	// admin ui
-	e.GET("/*", index)
+	e.GET("/*", assets)
 
 	// Restricted routes
 	// api := e.Group("/api")

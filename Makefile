@@ -5,6 +5,7 @@ BIN := $(PWD)/bin
 export PATH := $(BIN):$(PATH)
 export GOPATH := $(PWD)
 GO := go
+BINDATA_OPTS := -prefix assets/ -nocompress -nomemcopy -pkg main
 GO_SRC_FILES := $(shell find src -type f -name '*.go')
 UI_SRC_FILES := $(shell find src/js/ui/src -type f)
 
@@ -14,13 +15,24 @@ bin/go-bindata:
 bin/grapht: src/grapht/assets_gen.go $(GO_SRC_FILES)
 	$(GO) build -o $@ grapht
 
+bin/grapht-debug: src/grapht/debug_assets_gen.go $(GO_SRC_FILES)
+	$(GO) build -o $@ grapht
+
 assets/index.html.gz: src/js/ui/dist/index.html bin/go-bindata
 	mkdir -p assets
 	cp $< assets/index.html
 	gzip -f assets/index.html
 
-src/grapht/assets_gen.go: assets/index.html.gz
-	./bin/go-bindata -prefix assets/ -debug -nocompress -nomemcopy -pkg main -o $@ assets/
+assets/react-md.min.css.map: src/js/ui/dist/react-md.min.css.map
+	cp $< $@
+
+src/grapht/assets_gen.go: assets/index.html.gz assets/react-md.min.css.map
+	rm -f src/grapht/debug_assets_gen.go
+	./bin/go-bindata $(BINDATA_OPTS) -o $@ assets/
+
+src/grapht/debug_assets_gen.go: assets/index.html.gz assets/react-md.min.css.map
+	rm -f src/grapht/assets_gen.go
+	./bin/go-bindata $(BINDATA_OPTS) -o $@ -debug assets/
 
 src/js/ui/dist/bundle.js: $(UI_SRC_FILES)
 	(cd src/js/ui && make dist/bundle.js)
@@ -28,7 +40,9 @@ src/js/ui/dist/bundle.js: $(UI_SRC_FILES)
 src/js/ui/dist/index.html: src/js/ui/dist/bundle.js
 	(cd src/js/ui && make dist/index.html)
 
-watch: bin/grapht
+watch:
+	rm -f bin/grapht-debug
+	rm -f assets/index.html.gz
 	(cd src/js/ui && npm run watch 2>&1) | node watch.js
 
 test: bin/grapht

@@ -3,7 +3,7 @@ import {PureComponent,PropTypes} from 'react';
 import CSSTransitionGroup from 'react-addons-css-transition-group';
 import classnames from 'classnames';
 import { render } from 'react-dom';
-import { Router, Route, Link, browserHistory } from 'react-router'
+import { Router, Route, Link, browserHistory, IndexRoute } from 'react-router'
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
@@ -86,14 +86,8 @@ class App extends React.Component {
 	onConnectionStateChange = (online) => {
 		let data = this.state.data;
 		if( !online ){
-			// debug
-			this.onConnectionStateChange = function(online){
-				if( online ){
-					window.location.reload();
-				}
-			}
-			// end debug
 			data = null;
+
 		}
 		this.setState({
 			online,
@@ -835,14 +829,19 @@ const ErrorPane = ({err}) => (
 	<div>Error {err}</div>
 );
 
+const Home = () => (
+	<div>HOMEY</div>
+);
+
 render((
 	<Router history={browserHistory}>
 		<Route path="/" component={App}>
+			<IndexRoute component={Home}/>
 			<Route path="types" component={TypesPane}/>
 			<Route path="types/:name" component={TypeEditPane}/>
 			<Route path="content" component={ContentPane}/>
 			<Route path="content/:id" component={ContentEditPane}/>
-			<Route path="*" component={ErrorPane}/>
 		</Route>
+		<Route path="*" component={ErrorPane}/>
  	</Router>
 ), document.getElementById('app'))

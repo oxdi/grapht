@@ -7,11 +7,14 @@ dist/bundle.js: package.json $(UI_SRC_FILES)
 	mkdir -p dist
 	npm run build
 
+dist/react-md.min.css.map: src/react-md.min.css.map
+	cp $< $@
+
 dist/bundle.css: src/normalize.css src/react-md.min.css
 	mkdir -p dist
 	cat src/normalize.css node_modules/react-md/dist/react-md.min.css >$@
 
-dist/index.html: src/index.html dist/bundle.js dist/bundle.css
+dist/index.html: src/index.html dist/bundle.js dist/bundle.css dist/react-md.min.css.map
 	mkdir -p dist
 	cat $< >$@.tmp
 	sed -i -e '/{JS}/r dist/bundle.js' $@.tmp
