@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+type Claims map[string]interface{}
+
 type M struct {
-	T time.Time              // Timestamp
-	U string                 // Uid
-	Q string                 // Query
-	P map[string]interface{} // Query params
+	Timestamp time.Time              `json:"t,omitempty"`
+	Claims    Claims                 `json:"c,omitempty"`
+	Query     string                 `json:"q,omitempty"`
+	Params    map[string]interface{} `json:"p:omitempty"`
 }
 
 type DB struct {
@@ -57,22 +59,25 @@ func (db *DB) closeConnection(conn *Conn) error {
 	return nil
 }
 
-func (db *DB) NewConnection(uid string) *Conn {
+func (db *DB) NewConnection(claims Claims) (*Conn, error) {
 	db.RLock()
 	defer db.RUnlock()
 	c := &Conn{
-		db:  db,
-		g:   db.g,
-		uid: uid,
+		db:     db,
+		g:      db.g,
+		claims: claims,
 	}
 	db.conns = append(db.conns, c)
-	return c
+	return c, nil
 }
 
 func (db *DB) apply(m *M) error {
-	c := db.NewConnection(m.U)
+	c, err := db.NewConnection(m.Claims)
+	if err != nil {
+		return err
+	}
 	defer c.Close()
-	c.ExecWithParams(m.Q, m.P) //TODO: handle result errors
+	c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
 	db.g = c.g
 	return nil
 }

@@ -51,8 +51,9 @@ test: bin/grapht
 	(cd src/js/grapht && ./test/runner.sh)
 
 clean:
-	rm src/grapht/assets_gen.go
+	rm -f src/grapht/assets_gen.go
 	rm -f bin/grapht
+	(cd src/js/ui && make clean)
 
 all: bin/grapht
 

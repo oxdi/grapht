@@ -242,6 +242,7 @@ class App extends React.Component {
 				tabletDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				desktopDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				navItems={this.sidebarItems()}
+				drawerChildren={<div>HELLO</div>}
 				toolbarChildren={this.toolbarItems()}>
 				{this.state.dialog}
 				{section}

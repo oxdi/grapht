@@ -4,6 +4,9 @@
   "description": "grapht client",
   "main": "index.js",
   "scripts": {
+    "build": "browserify index.js -o dist/bundle.js",
+    "build-tests": "browserify test/connection_test.js -o dist/testbundle.js",
+    "test2": "browserify --debug test/connection_test.js | tape-run -b chromium",
     "test": "browserify --debug test/connection_test.js | tape-run -b chromium | node test/bail.js | faucet"
   },
   "author": "",

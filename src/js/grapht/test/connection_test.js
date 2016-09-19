@@ -5,103 +5,123 @@ var test = require('blue-tape')
 var Grapht = require('../index.js');
 
 var host = "localhost:8282";
-var appID = "jstest";
+var APP_ID = "jstest";
+
+var userToken;
+var adminSessionToken;
+var guestSessionToken;
+
 var admin;
 var guest;
 
+var client = new Grapht.Client({host: host});
 
-
-test("create a database", function(t){
-	return Promise.resolve()
-	.then(function(){
-		return Grapht.register({
-			host: host,
-			email: "admin@example.com",
-			username: "admin",
-			password: "p4sswerd%",
-			appID: appID,
+test("register and create app", function(t){
+	return client.register({
+		id: "admin",
+		email: "admin@example.com",
+		password: "p4sswerd%",
+	}).then(function({userToken}){
+		return client.createApp({
+			id: APP_ID,
+			userToken: userToken,
 		})
-	})
-	.then(function(credentials){
-		t.ok(credentials,'expected a credentials object');
-		t.ok(credentials.token,'expected a token');
-		return Grapht.connect({
-			host: host,
-			credentials: credentials
-		});
-	})
-	.then(function(store){
-		admin = store;
-		return admin.query(`
-			user:node(id:"admin") {
-				id
-			}
-			types {
-				name
-				fields {
-					name
-					type
-				}
-			}
-		`);
-	})
-	.then(function(res){
+	}).then(function(res){
 		t.same(res, {
-			user: {
-				id: "admin"
-			},
-			types: [
-				{name:"User", fields: [
-					{name:"email", type:"Text"},
-					{name:"password", type:"Text"},
-				]}
-			]
+			id: APP_ID,
+		});
+	});
+});
+
+test("authenticate admin", function(t){
+	return client.authenticate({
+		id: "admin",
+		password: "p4sswerd%",
+	}).then(function({userToken}){
+		t.ok(userToken, 'should return userToken');
+	});
+})
+
+test("authenticate admin and connect (long)", function(t){
+	return client.authenticate({
+		id: "admin",
+		password: "p4sswerd%",
+	}).then(function({userToken}){
+		t.ok(userToken, 'should reutrn userToken');
+		return client.createSession({
+			userToken: userToken,
+			appID: APP_ID,
+		})
+	}).then(function({sessionToken}){
+		t.ok(sessionToken, 'should return sessionToken');
+		t.equal(typeof sessionToken, 'string');
+		return client.connectSession({
+			sessionToken: sessionToken
+		});
+	}).then(function(conn){
+		t.ok(conn.setType, 'should return conn');
+	})
+})
+
+test("authenticate admin and connect (using shortcut)", function(t){
+	return client.connect({
+		userID: "admin",
+		password: "p4sswerd%",
+		appID: APP_ID,
+	}).then(function(conn){
+		t.ok(conn, 'conn should exist');
+		admin = conn;
+	});
+})
+
+test("initial database state", function(t){
+	return admin.query(`
+		types {
+			name
+			fields {
+				name
+				type
+			}
+		}
+	`).then(function(res){
+		t.same(res, {
+			types: []
 		});
 	})
 })
 
-test("fail to connect to database using invalid user", function(t){
-	return Grapht.connect({
-		host: host,
-		credentials: {
-			username: "adminnnn",
-			password: "p4sswerd%",
-			appID: appID
-		}
-	}).then(function(c){
-		t.fail('should have rejected invalid user/pass');
-	}).catch(function(err){
-		t.ok(err);
-	});
-})
-
-test("fail to connect to database using invalid pass", function(t){
-	return Grapht.connect({
-		host: host,
-		credentials: {
-			username: "admin",
-			password: "p4ssw",
-			appID: appID
-		}
-	}).then(function(c){
-		t.fail('should have rejected invalid user/pass');
-	}).catch(function(err){
-		t.ok(err);
-	});
-})
-
-test("connect to database using guest user/pass", function(t){
-	return Grapht.connect({
-		host: host,
-		credentials: {
-			username: "guest",
-			password: "guest",
-			appID: appID
-		}
-	}).then(function(c){
-		t.ok(c.cfg.token);
-		guest = c;
+test("fetch guest session token", function(t){
+	return client.getGuestSession(
+		APP_ID
+	).then(function({sessionToken}){
+		t.ok(sessionToken,'should return sessionToken');
+		return client.connect({sessionToken});
+	}).then(function(conn){
+		t.ok(conn.setType);
+		guest = conn;
 	})
+})
+
+test("fail to authenticate using invalid user", function(t){
+	return client.authenticate({
+		username: "adminnnn",
+		password: "p4sswerd%",
+	}).then(function(c){
+		t.fail('should have rejected invalid user/pass');
+	}).catch(function(err){
+		t.ok(err);
+	});
+})
+
+test("fail to authenticate using invalid pass", function(t){
+	return client.authenticate({
+		username: "admin",
+		password: "p4sswe",
+	}).then(function(c){
+		t.fail('should have rejected invalid user/pass');
+	}).catch(function(err){
+		t.ok(err);
+	});
 })
 
 test("create an Author type", function(t){
@@ -428,8 +448,6 @@ test("list all nodes", function(t){
 	.then(function(data){
 		return t.same(data, {
 			nodes: [
-				{id: "guest"},
-				{id: "admin"},
 				{id: "alice"},
 				{id: "bob"},
 				{id: "cheddar-post"},
@@ -653,12 +671,10 @@ test("guest connection should be unaffected so far", function(t){
 		}
 	`)
 	.then(function(data){
-		return t.same(data, {nodes:[
-			{id: "guest"},
-			{id: "admin"},
-		],types:[
-			{name:"User"}
-		]})
+		return t.same(data, {
+			nodes:[],
+			types:[]
+		})
 	})
 });
 
@@ -669,7 +685,7 @@ test.skip("reconnecting admin should keep connection state", function(t){
 				host: host,
 				username: "admin",
 				password: "p4sswerd%",
-				appID: appID
+				appID: APP_ID
 			})
 		})
 		.then(function(conn){
@@ -683,8 +699,6 @@ test.skip("reconnecting admin should keep connection state", function(t){
 		.then(function(res){
 			t.same(res, {
 				nodes:[
-					{id: "guest"},
-					{id: "admin"},
 					{id:"bob"},
 					{id:"stilton-post"},
 					{id:"cheese-tag"},
@@ -699,7 +713,7 @@ test("commit admin changes", function(t){
 });
 
 
-test("guest connection  should now reflect all changes", function(t){
+test("guest connection should now reflect all changes", function(t){
 	return guest.query(`
 		nodes {
 			id
@@ -711,15 +725,12 @@ test("guest connection  should now reflect all changes", function(t){
 	.then(function(data){
 		return t.same(data, {
 			nodes:[
-				{id: "guest"},
-				{id: "admin"},
 				{id:"bob"},
 				{id:"stilton-post"},
 				{id:"cheese-tag"},
 				{id:"cheddar-post"},
 			],
 			types:[
-				{name:"User"},
 				{name:"Author"},
 				{name:"Post"},
 				{name:"Tag"},
@@ -735,8 +746,9 @@ test("subscribed query should update after setNode", function(t){
 				name
 			}
 		}
-	`)
-	.then((query) => {
+	`).then((query) => {
+		t.ok(query, 'should return query');
+		t.ok(query.on, 'query should have on func');
 		return new Promise(function(resolve){
 			var state = {dataCount: 0};
 			query.on('data', function(data){

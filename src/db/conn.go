@@ -10,10 +10,10 @@ import (
 )
 
 type Conn struct {
-	g   *graph.Graph
-	db  *DB
-	uid string
-	log []*M
+	g      *graph.Graph
+	db     *DB
+	claims Claims
+	log    []*M
 	sync.RWMutex
 	OnChange func()
 }
@@ -32,10 +32,10 @@ func (c *Conn) Exec(query string) *graphql.Result {
 
 func (c *Conn) ExecWithParams(query string, params map[string]interface{}) *graphql.Result {
 	c.log = append(c.log, &M{
-		T: time.Now(),
-		Q: query,
-		U: c.uid,
-		P: params,
+		Timestamp: time.Now(),
+		Claims:    c.claims,
+		Query:     query,
+		Params:    params,
 	})
 	result := c.query(query, params)
 	return result
