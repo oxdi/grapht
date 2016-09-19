@@ -228,6 +228,17 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 					return attr.Value, nil
 				},
 			},
+			"encoding": &graphql.Field{
+				Type:        graphql.String,
+				Description: "how the attr value is encoded",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					attr, ok := p.Source.(*graph.Attr)
+					if !ok {
+						return nil, castError("encoding", p.Source, "Attr")
+					}
+					return attr.Encoding, nil
+				},
+			},
 		},
 	})
 	return cxt.attrObject
@@ -942,10 +953,13 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 					Name: "AttrArg",
 					Fields: graphql.InputObjectConfigFieldMap{
 						"name": &graphql.InputObjectFieldConfig{
-							Type: graphql.String,
+							Type: graphql.NewNonNull(graphql.String),
 						},
 						"value": &graphql.InputObjectFieldConfig{
-							Type: graphql.String,
+							Type: graphql.NewNonNull(graphql.String),
+						},
+						"encoding": &graphql.InputObjectFieldConfig{
+							Type: graphql.NewNonNull(graphql.String),
 						},
 					},
 				})),
@@ -1024,10 +1038,10 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("node", cxt.NodeField(nil))
 	cxt.AddQuery("nodes", cxt.NodeListField(nil))
 	cxt.AddQuery("types", cxt.GetTypes())
-	cxt.AddMutation("defineType", cxt.DefineTypeMutation())
-	cxt.AddMutation("set", cxt.SetMutation())
-	cxt.AddMutation("connect", cxt.ConnectMutation())
-	cxt.AddMutation("disconnect", cxt.DisconnectMutation())
-	cxt.AddMutation("remove", cxt.RemoveMutation())
+	cxt.AddMutation("setType", cxt.DefineTypeMutation())
+	cxt.AddMutation("setNode", cxt.SetMutation())
+	cxt.AddMutation("removeNodes", cxt.RemoveMutation())
+	cxt.AddMutation("setEdge", cxt.ConnectMutation())
+	cxt.AddMutation("removeEdges", cxt.DisconnectMutation())
 	return cxt.schema()
 }

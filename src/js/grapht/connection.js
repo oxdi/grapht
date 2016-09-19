@@ -10,6 +10,9 @@ const DATA = "data";
 const SUBSCRIBE = "subscribe";
 const TOKEN = "token";
 
+// value encoding types
+const STRING_ENCODING = "string";
+
 function log(...args){
 	if( typeof console == 'object' && console.log ){
 		console.log(...args);
@@ -241,7 +244,7 @@ export default class Connection {
 				fields: '[FieldArg]'
 			},
 			query: `
-				type:defineType(${this.toPlaceholders(args)}) {
+				type:setType(${this.toPlaceholders(args)}) {
 					${returning}
 				}
 			`,
@@ -269,12 +272,14 @@ export default class Connection {
 		if( args.values ){
 			for( var k in args.values ){
 				var v = args.values[k];
+				var enc = STRING_ENCODING;
 				if( v.toString ){
 					v = v.toString();
 				}
 				node.attrs.push({
 					name: k,
 					value: v,
+					encoding: enc,
 				});
 			}
 		}
@@ -285,7 +290,7 @@ export default class Connection {
 				attrs: '[AttrArg]'
 			},
 			query: `
-				node:set(${this.toPlaceholders(node)}) {
+				node:setNode(${this.toPlaceholders(node)}) {
 					${returning || 'id'}
 				}
 			`,
@@ -305,7 +310,7 @@ export default class Connection {
 				id: 'String!',
 			},
 			query: `
-				node:remove(${this.toPlaceholders(args)}) {
+				node:removeNodes(${this.toPlaceholders(args)}) {
 					${returning}
 				}
 			`,
@@ -331,7 +336,7 @@ export default class Connection {
 				name: 'String!',
 			},
 			query: `
-				edge:connect(${this.toPlaceholders(args)}) {
+				edge:setEdge(${this.toPlaceholders(args)}) {
 					${returning}
 				}
 			`,
@@ -357,7 +362,7 @@ export default class Connection {
 				name: 'String!',
 			},
 			query: `
-				edges:disconnect(${this.toPlaceholders(args)}) {
+				edges:removeEdges(${this.toPlaceholders(args)}) {
 					${returning}
 				}
 			`,

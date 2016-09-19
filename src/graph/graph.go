@@ -36,10 +36,7 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 	n := &node{
 		id:    v.ID,
 		t:     v.Type,
-		attrs: Attrs{},
-	}
-	for _, v := range v.Attrs {
-		n.attrs[v.Name] = v.Value
+		attrs: v.Attrs,
 	}
 	g2.nodes = append(g2.nodes, n)
 	return g2

@@ -342,22 +342,22 @@ func createDB(c echo.Context) error {
 	conn := db.NewConnection("")
 	mutations := []string{
 		`
-			defineType(name:"User", fields:[
+			setType(name:"User", fields:[
 				{name: "email", type:"Text"},
 				{name: "password", type:"Text"},
 			]) {
 				name
 			}
 		`, `
-			set(id:"guest", type: "User", attrs: [
-				{name:"password", value:"guest"}
+			setNode(id:"guest", type: "User", attrs: [
+				{name:"password", value:"guest", encoding:"string"}
 			]) {
 				id
 			}
 		`, fmt.Sprintf(`
-			set(id:"%s", type: "User", attrs: [
-				{name:"email", value:"%s"},
-				{name:"password", value:"%s"}
+			setNode(id:"%s", type: "User", attrs: [
+				{name:"email", value:"%s", encoding:"string"},
+				{name:"password", value:"%s", encoding:"string"}
 			]) {
 				id
 			}

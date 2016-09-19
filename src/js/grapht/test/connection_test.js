@@ -347,13 +347,14 @@ test("create a Cheese tag", function(t){
 		attrs {
 			name
 			value
+			encoding
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
 			id: "cheese-tag",
 			attrs: [
-				{name:"name", value: "CHEESE"}
+				{name:"name", value: "CHEESE", encoding:"string"}
 			]
 		})
 	})

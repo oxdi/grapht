@@ -10,16 +10,15 @@ func stringIn(needle string, haystack []string) bool {
 }
 
 type Attr struct {
-	Name  string
-	Value string
+	Name     string
+	Value    string
+	Encoding string
 }
-
-type Attrs map[string]string
 
 type NodeConfig struct {
 	ID    string
 	Type  string
-	Attrs []Attr
+	Attrs []*Attr
 }
 
 type Nodes []*Node
@@ -52,7 +51,7 @@ func (ns Nodes) FilterType(types ...string) Nodes {
 
 type node struct {
 	id    string
-	attrs map[string]string
+	attrs []*Attr
 	t     string
 }
 
@@ -73,18 +72,16 @@ func (n *Node) Attr(key string) string {
 	if n.n.attrs == nil {
 		return ""
 	}
-	return n.n.attrs[key]
+	for _, attr := range n.n.attrs {
+		if attr.Name == key {
+			return attr.Value
+		}
+	}
+	return ""
 }
 
 func (n *Node) Attrs() []*Attr {
-	attrs := []*Attr{}
-	for k, v := range n.n.attrs {
-		attrs = append(attrs, &Attr{
-			Name:  k,
-			Value: v,
-		})
-	}
-	return attrs
+	return n.n.attrs
 }
 
 func (n *Node) Edges(edgeName string, edgeDir string) Edges {
