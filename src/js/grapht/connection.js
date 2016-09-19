@@ -19,6 +19,21 @@ function log(...args){
 	}
 }
 
+function objectToAttrs(o){
+	return Object.keys(o).reduce((attrs,k) => {
+		let attr = {
+			name: k,
+			value: o[k],
+			encoding: STRING_ENCODING
+		};
+		if( attr.value.toString ){
+			attr.value = attr.value.toString();
+		}
+		attrs.push(attr);
+		return attrs;
+	},[])
+}
+
 export default class Connection {
 
 	constructor(cfg){
@@ -260,28 +275,13 @@ export default class Connection {
 		var node = {
 			id: args.id,
 			type: args.type,
-			attrs: [],
+			attrs: objectToAttrs(args.values),
 		};
 		if( !node.id ){
 			return Promise.reject(new Error('setNode requires id'));
 		}
 		if( !node.type ){
 			return Promise.reject(new Error('setNode requires type'));
-		}
-		// serialize values to attrs
-		if( args.values ){
-			for( var k in args.values ){
-				var v = args.values[k];
-				var enc = STRING_ENCODING;
-				if( v.toString ){
-					v = v.toString();
-				}
-				node.attrs.push({
-					name: k,
-					value: v,
-					encoding: enc,
-				});
-			}
 		}
 		return this.mutation({
 			input: {
@@ -291,6 +291,31 @@ export default class Connection {
 			},
 			query: `
 				node:setNode(${this.toPlaceholders(node)}) {
+					${returning || 'id'}
+				}
+			`,
+			params: node
+		})
+		.then((data) => {
+			return data.node;
+		});
+	}
+
+	mergeNode(args, returning){
+		var node = {
+			id: args.id,
+			attrs: objectToAttrs(args.values),
+		};
+		if( !node.id ){
+			return Promise.reject(new Error('setNode requires id'));
+		}
+		return this.mutation({
+			input: {
+				id: 'String!',
+				attrs: '[AttrArg]'
+			},
+			query: `
+				node:mergeNode(${this.toPlaceholders(node)}) {
 					${returning || 'id'}
 				}
 			`,

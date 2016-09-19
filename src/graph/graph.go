@@ -42,6 +42,38 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 	return g2
 }
 
+func (g *Graph) Merge(v NodeConfig) *Graph {
+	g2 := g.clone()
+	g2.nodes = []*node{}
+	found := false
+	for _, oldNode := range g.nodes {
+		if oldNode.id == v.ID {
+			newNode := &node{
+				id:    v.ID,
+				attrs: v.Attrs,
+			}
+			// copy fields from old
+			newNode.t = oldNode.t
+			// ignoer oldAttrs that exist in newAttrs
+			for _, oldAttr := range oldNode.attrs {
+				for _, newAttr := range newNode.attrs {
+					if oldAttr.Name != newAttr.Name {
+						newNode.attrs = append(newNode.attrs, oldAttr)
+					}
+				}
+			}
+			g2.nodes = append(g2.nodes, newNode)
+			found = true
+		} else {
+			g2.nodes = append(g2.nodes, oldNode)
+		}
+	}
+	if !found {
+		panic("merge failed no node found")
+	}
+	return g2
+}
+
 func (g *Graph) Remove(id string) *Graph {
 	g2 := g.clone()
 	g2.nodes = []*node{}

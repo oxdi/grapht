@@ -189,6 +189,10 @@ test("create an Author node called alice", function(t){
 	return admin.setNode({
 		id:"alice",
 		type:"Author",
+		values: {
+			name: "alice alison",
+			admin: true,
+		}
 	},`
 		id
 		type {
@@ -205,15 +209,12 @@ test("create an Author node called alice", function(t){
 	})
 });
 
-test("give alice a full name, age, height and admin flag", function(t){
-	return admin.setNode({
+test("merge alice node to add age and height values", function(t){
+	return admin.mergeNode({
 		id:"alice",
-		type:"Author",
 		values: {
-			name: "alice alison",
 			age: 52,
 			height: 1.6,
-			admin: true,
 		}
 	},`
 		...on Author {

@@ -62,6 +62,7 @@ type GraphqlContext struct {
 	fieldDefinitionObject *graphql.Object
 	typeDefinitionObject  *graphql.Object
 	attrObject            *graphql.Object
+	attrInputObject       *graphql.InputObject
 	imageObject           *graphql.Object
 	edgeObject            *graphql.Object
 	nodeInterface         *graphql.Interface
@@ -937,6 +938,79 @@ func (cxt *GraphqlContext) RemoveMutation() *graphql.Field {
 		},
 	}
 }
+func (cxt *GraphqlContext) MergeMutation() *graphql.Field {
+	return &graphql.Field{
+		Description: "set node data",
+		Type:        cxt.NodeInterface(),
+		Args: graphql.FieldConfigArgument{
+			"id": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"attrs": &graphql.ArgumentConfig{
+				Type: graphql.NewList(cxt.AttrInputObject()),
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			cfg := graph.NodeConfig{}
+			err := fill(&cfg, p.Args)
+			if err != nil {
+				return nil, err
+			}
+			g := cxt.conn.g
+			target := g.Get(cfg.ID)
+			if target == nil {
+				return nil, fmt.Errorf("cannot merge non existant node")
+			}
+			t := target.Type()
+			if t == nil {
+				return nil, fmt.Errorf("type %s is not defined", cfg.Type)
+			}
+			getField := func(name string) *graph.Field {
+				for _, field := range t.Fields {
+					if field.Name == name {
+						return field
+					}
+				}
+				return nil
+			}
+			for _, attr := range cfg.Attrs {
+				f := getField(attr.Name)
+				if f == nil {
+					return nil, fmt.Errorf("cannot set attr %s type %s does not define a field called %s", attr.Name, t.Name, attr.Name)
+				}
+			}
+			g = g.Merge(cfg)
+			n := g.Get(cfg.ID)
+			if n == nil {
+				return nil, fmt.Errorf("failed to create node")
+			}
+			cxt.conn.update(g)
+			return n, nil
+		},
+	}
+}
+
+func (cxt *GraphqlContext) AttrInputObject() *graphql.InputObject {
+	if cxt.attrInputObject != nil {
+		return cxt.attrInputObject
+	}
+	cxt.attrInputObject = graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "AttrArg",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"name": &graphql.InputObjectFieldConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"value": &graphql.InputObjectFieldConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+			"encoding": &graphql.InputObjectFieldConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+		},
+	})
+	return cxt.attrInputObject
+}
+
 func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 	return &graphql.Field{
 		Description: "set node data",
@@ -949,20 +1023,7 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				Type: graphql.NewNonNull(graphql.String),
 			},
 			"attrs": &graphql.ArgumentConfig{
-				Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
-					Name: "AttrArg",
-					Fields: graphql.InputObjectConfigFieldMap{
-						"name": &graphql.InputObjectFieldConfig{
-							Type: graphql.NewNonNull(graphql.String),
-						},
-						"value": &graphql.InputObjectFieldConfig{
-							Type: graphql.NewNonNull(graphql.String),
-						},
-						"encoding": &graphql.InputObjectFieldConfig{
-							Type: graphql.NewNonNull(graphql.String),
-						},
-					},
-				})),
+				Type: graphql.NewList(cxt.AttrInputObject()),
 			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
@@ -1040,6 +1101,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddMutation("setType", cxt.DefineTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetMutation())
+	cxt.AddMutation("mergeNode", cxt.MergeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())
 	cxt.AddMutation("setEdge", cxt.ConnectMutation())
 	cxt.AddMutation("removeEdges", cxt.DisconnectMutation())
