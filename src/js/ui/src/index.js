@@ -31,9 +31,9 @@ const FIELD_TYPES = [
 	'Image',
 ];
 
-import {Store,register} from 'grapht';
-let store = new Store({});
-window.store = store;
+import {Client} from 'grapht';
+let client = new Client({host:'toolbox.oxdi.eu:8282'});
+window.graphtClient = client;
 
 class App extends React.Component {
 
@@ -256,12 +256,13 @@ const CardList = ({children}) => (
 		{children}
 	</div>
 )
+const Icon = ({name}) => <UI.FontIcon>{name}</UI.FontIcon>;
 
 const TypeIcon = ({type}) => {
 	if( type.name == 'User' ){
-		return <UI.FontIcon>face</UI.FontIcon>;
+		return <Icon name="face" />;
 	}
-	return <UI.FontIcon>collections</UI.FontIcon>;
+	return <Icon name="collections"/>;
 }
 
 class CreateTypeDialog extends React.Component {
@@ -834,15 +835,204 @@ const Home = () => (
 	<div>HOMEY</div>
 );
 
-render((
-	<Router history={browserHistory}>
-		<Route path="/" component={App}>
-			<IndexRoute component={Home}/>
-			<Route path="types" component={TypesPane}/>
-			<Route path="types/:name" component={TypeEditPane}/>
-			<Route path="content" component={ContentPane}/>
-			<Route path="content/:id" component={ContentEditPane}/>
-		</Route>
-		<Route path="*" component={ErrorPane}/>
- 	</Router>
-), document.getElementById('app'))
+class Component extends React.Component {
+
+}
+
+class AppSelector extends Component {
+
+	static propTypes = {
+		userToken: PropTypes.string
+	}
+
+	state = {user: null}
+
+	componentWillMount(){
+		let userToken = this.props.userToken
+		client.getUser({userToken}).then((u) => {
+			this.setState({user: u})
+		}).catch(err => {
+			this.setState({error: err.message})
+		})
+	}
+
+	getApps(){
+		let u = this.state.user;
+		if( !u ){
+			return [];
+		}
+		return Object.keys(u.apps.reduce((as,a) => {
+			as[a.id] = a;
+			return as;
+		},{}))
+	}
+
+	render(){
+		let user = this.state.user;
+		if( !user ){
+			return <div>no user</div>;
+		}
+		let apps = this.getApps();
+		return <div>
+			{apps.map(id => <div key={id}>{id}</div>)}
+		</div>;
+	}
+}
+
+class Login extends Component {
+
+	static propTypes = {
+		token: PropTypes.string,
+	}
+
+	state = {token: null, tab:0, errors: []}
+
+	getToken(){
+		return this.props.token || this.state.token;
+	}
+
+	setToken(t){
+		this.setState({token: t});
+	}
+
+	setError(msg){
+		const errors = this.state.errors.slice();
+		errors.push({
+			key: Date.now(),
+			text: msg,
+		});
+		this.setState({errors});
+	}
+
+	_login = (e) => {
+		if( e.preventDefault ){
+			e.preventDefault();
+		}
+		client.authenticate({
+			id: this.state.username,
+			password: this.state.password,
+		}).then(({userToken}) => {
+			this.setToken(userToken);
+		}).catch(err => {
+			this.setError(`Authentication failed: ${err.message}`)
+		})
+	}
+
+	_register = (e) => {
+		if( e.preventDefault ){
+			e.preventDefault();
+		}
+		client.register({
+			id: this.state.username,
+			email: this.state.email,
+			password: this.state.password,
+		}).then(({userToken}) => {
+			this.setToken(userToken);
+		}).catch(err => {
+			this.setError(`Login failed: ${err.message}`)
+		})
+	}
+
+	_onChangeUsername = (v) => {
+		this.setState({username: v})
+	}
+
+	_onChangePassword = (v) => {
+		this.setState({password: v})
+	}
+
+	_onChangeEmail = (v) => {
+		this.setState({email: v})
+	}
+
+	_setTab = (idx) => {
+		this.setState({tab: idx})
+	}
+
+	_dismissError = () => {
+		const errors = this.state.errors.slice();
+		errors.shift();
+		this.setState({ errors });
+	}
+
+	renderLoginForm(){
+		let actions = <div style={{marginLeft:'auto'}}>
+			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Login" onClick={this._login}/>
+		</div>;
+		return <form onSubmit={this._login}>
+			<div>
+				<UI.TextField label="Username" fullWidth value={this.state.username} onChange={this._onChangeUsername} />
+			</div>
+			<div>
+				<UI.TextField label="Password" rightIcon={<i></i>} fullWidth errorText={this.state.loginError} type="password" value={this.state.password} onChange={this._onChangePassword} />
+			</div>
+			<div>
+				<UI.Toolbar primary={false} actionsRight={actions} />
+			</div>
+		</form>;
+	}
+
+	renderRegisterForm(){
+		let actions = <div style={{marginLeft:'auto'}}>
+			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Register Now" onClick={this._register}/>
+		</div>;
+		return <div>
+			<div>
+				<UI.TextField fullWidth label="Username" value={this.state.username} onChange={this._onChangeUsername} />
+			</div>
+			<div>
+				<UI.TextField fullWidth label="Password" rightIcon={<i></i>} type="password" value={this.state.password} onChange={this._onChangePassword} />
+			</div>
+			<div>
+				<UI.TextField fullWidth label="Email" value={this.state.email} onChange={this._onChangeEmail} />
+			</div>
+			<div>
+				<UI.Toolbar primary={false} actionsRight={actions} />
+			</div>
+		</div>;
+	}
+
+	renderForm(){
+		return this.state.tab == 0 ?
+			this.renderLoginForm() :
+			this.renderRegisterForm();
+	}
+
+	renderLoginDialog(){
+		return <div className="md-card-list">
+			<UI.Dialog isOpen close={() => {}}>
+				<UI.Tabs centered fixedWidth primary>
+					<UI.Tab label="Login" icon={<UI.FontIcon>face</UI.FontIcon>} onChange={this._setTab} />
+					<UI.Tab label="Register" icon={<UI.FontIcon>edit</UI.FontIcon>} onChange={this._setTab} />
+				</UI.Tabs>
+				{this.renderForm()}
+			</UI.Dialog>
+			<UI.Snackbar
+				toasts={this.state.errors}
+				dismiss={this._dismissError}
+				autohide={true}
+			/>
+		</div>;
+	}
+
+	render(){
+		let token = this.getToken();
+		if( !token ){
+			return this.renderLoginDialog();
+		}
+		return <AppSelector userToken={token} />;
+	}
+}
+
+const Routey = () => <Router history={browserHistory}>
+	<Route path="/" component={App}>
+		<IndexRoute component={Home}/>
+		<Route path="types" component={TypesPane}/>
+		<Route path="types/:name" component={TypeEditPane}/>
+		<Route path="content" component={ContentPane}/>
+		<Route path="content/:id" component={ContentEditPane}/>
+	</Route>
+	<Route path="*" component={ErrorPane}/>
+</Router>;
+
+render(<Login />, document.getElementById('app'))

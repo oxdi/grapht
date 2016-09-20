@@ -14,7 +14,7 @@ export default class Client {
 	}
 
 	register(o){ // returns Promise<UserToken>
-		return this._post(`/users`, o)
+		return this._post(`/register`, o)
 			.then(() => this.authenticate({
 				id: o.id,
 				password: o.password,

@@ -64,8 +64,7 @@ func StartServer() error {
 
 	// REST api
 	e.POST("/authenticate", users.AuthenticateHandler)
-	e.POST("/users", users.CreateHandler)
-	e.GET("/users", WrapClaims(users.GetAllHandler))
+	e.POST("/register", users.CreateHandler)
 	e.GET("/user", WrapClaims(users.GetHandler))
 	e.POST("/apps", WrapClaims(apps.CreateHandler))
 	e.POST("/sessions", WrapClaims(sessions.CreateHandler))

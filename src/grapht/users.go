@@ -74,10 +74,10 @@ func (uc *UserCollection) Create(newUser *User) (*User, error) {
 		return nil, fmt.Errorf("email is required")
 	}
 	if u, _ := uc.Get(newUser.ID); u != nil {
-		return nil, fmt.Errorf("id already exists")
+		return nil, fmt.Errorf("user already exists")
 	}
 	if u, _ := uc.GetByEmail(newUser.Email); u != nil {
-		return nil, fmt.Errorf("id already exists")
+		return nil, fmt.Errorf("email already exists")
 	}
 	uc.Users = append(uc.Users, newUser)
 	if err := uc.Save(); err != nil {
@@ -92,7 +92,7 @@ func (uc *UserCollection) Get(id string) (*User, error) {
 			return u, nil
 		}
 	}
-	return nil, fmt.Errorf("cannot get user for that id")
+	return nil, fmt.Errorf("user not found")
 }
 
 func (uc *UserCollection) GetByEmail(email string) (*User, error) {
@@ -101,7 +101,7 @@ func (uc *UserCollection) GetByEmail(email string) (*User, error) {
 			return u, nil
 		}
 	}
-	return nil, fmt.Errorf("cannot get user for that email")
+	return nil, fmt.Errorf("user not found")
 }
 
 func (uc *UserCollection) Authenticate(id string, pw string) (*User, error) {
