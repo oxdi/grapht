@@ -66,7 +66,6 @@ class Component extends React.Component {
 class App extends Component {
 
 	static propTypes = {
-		id: PropTypes.string,
 		conn: PropTypes.object.isRequired,
 	}
 
@@ -134,11 +133,14 @@ class App extends Component {
 		`
 	}
 
-	logout(){
+	_logout = () => {
 		localStorage.clear();
-		this.props.onCloseSession();
+		this._closeSession();
 	}
 
+	_closeSession = () => {
+		this.props.onCloseSession();
+	}
 
 	sidebarItems(){
 		let router = this.context.router;
@@ -155,8 +157,11 @@ class App extends Component {
 			primaryText: 'Audit Trail',
 			onClick: () => this.go('/settings'),
 		},{
+			primaryText: 'Switch Apps',
+			onClick: this._closeSession,
+		},{
 			primaryText: 'logout',
-			onClick: () => this.logout(),
+			onClick: this._logout,
 		}]
 	}
 
@@ -837,7 +842,7 @@ class SelectApp extends Component {
 
 }
 
-class AppSelector extends Component {
+class Connection extends Component {
 
 	static propTypes = {
 		userToken: PropTypes.string.isRequired,
@@ -852,8 +857,14 @@ class AppSelector extends Component {
 
 	refresh(){
 		let userToken = this.props.userToken;
+		let sessionToken = this.props.sessionToken;
 		return client.getUser({userToken}).then((u) => {
 			this.setState({user: u})
+		}).then((u) => {
+			if( sessionToken ){
+				return client.connectSession({sessionToken})
+					.then(this._onConnect)
+			}
 		}).catch(err => {
 			this.addToast(err);
 		})
@@ -866,6 +877,10 @@ class AppSelector extends Component {
 			as[a.id] = a;
 			return as;
 		},{}));
+	}
+
+	_onConnect = (conn) => {
+		this.setState({conn})
 	}
 
 	_createApp = ({id}) => {
@@ -892,12 +907,14 @@ class AppSelector extends Component {
 		return client.createSession({
 			appID: id,
 			userToken: this.props.userToken,
-		}).then(({sessionToken}) => {
-			return client.connectSession({sessionToken});
-		}).then((conn) => {
-			console.log('connected', conn);
-			this.setState({id,conn});
 		})
+		.then(({sessionToken}) => {
+			return client.connectSession({sessionToken}).then(conn => {
+				localStorage.setItem('sessionToken', sessionToken);
+				return conn;
+			})
+		})
+		.then(this._onConnect)
 		.catch(err => {
 			this.addToast(`Failed to create session: ${err.message}`);
 		})
@@ -909,7 +926,7 @@ class AppSelector extends Component {
 			return <div>fetching apps</div>;
 		}
 		if( this.state.conn ){
-			return <App id={this.state.id} conn={this.state.conn} onCloseSession={this._closeSession}>
+			return <App conn={this.state.conn} onCloseSession={this._closeSession}>
 				{this.props.children}
 			</App>;
 		}
@@ -917,19 +934,20 @@ class AppSelector extends Component {
 	}
 }
 
-class Login extends Component {
+class Session extends Component {
 
 	static propTypes = {
 		userToken: PropTypes.string,
+		sessionToken: PropTypes.string,
 	}
 
 	state = {userToken: null, tab:0}
 
-	getToken(){
+	getUserToken(){
 		return this.props.userToken || this.state.userToken;
 	}
 
-	setToken(userToken){
+	setUserToken(userToken){
 		localStorage.setItem('userToken', userToken);
 		this.setState({userToken});
 	}
@@ -946,7 +964,7 @@ class Login extends Component {
 			id: this.state.username,
 			password: this.state.password,
 		}).then(({userToken}) => {
-			this.setToken(userToken);
+			this.setUserToken(userToken);
 		}).catch(err => {
 			this.setError(`Authentication failed: ${err.message}`)
 		})
@@ -967,7 +985,7 @@ class Login extends Component {
 			}).catch(err => {
 				this.setError(`Failed to create app: ${err.message}`);
 			}).then(() => {
-				this.setToken(userToken);
+				this.setUserToken(userToken);
 			})
 		}).catch(err => {
 			this.setError(`Login failed: ${err.message}`)
@@ -1053,15 +1071,17 @@ class Login extends Component {
 	}
 
 	render(){
-		let token = this.getToken();
+		let token = this.getUserToken();
 		if( !token ){
 			return this.renderLoginDialog();
 		}
-		return <AppSelector userToken={token}>{this.props.children}</AppSelector>;
+		return <Connection sessionToken={this.props.sessionToken} userToken={token}>{this.props.children}</Connection>;
 	}
 }
 
-class Base extends React.Component {
+// the app "chrome" is the global stuff that every component has available
+// stuff like error message displays, dialogs etc
+class Chrome extends React.Component {
 
 	static childContextTypes = {
 		base: PropTypes.object,
@@ -1100,7 +1120,9 @@ class Base extends React.Component {
 
 	render(){
 		return <div>
-			{this.props.children}
+			<Session userToken={this.props.route.userToken} sessionToken={this.props.route.sessionToken}>
+				{this.props.children}
+			</Session>
 			<UI.Snackbar
 				toasts={this.state.toasts}
 				dismiss={this._dismissToast}
@@ -1110,12 +1132,6 @@ class Base extends React.Component {
 	}
 }
 
-const Chrome = (props) => <Base>
-	<Login {...props.route}>
-		{props.children}
-	</Login>
-</Base>;
-
 const AppRouter = (props) => <Router history={browserHistory}>
 	<Route path="/" {...props} component={Chrome}>
 		<IndexRoute component={Home}/>
@@ -1124,8 +1140,8 @@ const AppRouter = (props) => <Router history={browserHistory}>
 		<Route path="content" component={ContentPane}/>
 		<Route path="content/:id" component={ContentEditPane}/>
 	</Route>
-	<Route path="*" component={ErrorPane}/>
 </Router>;
 
-let localToken = localStorage.getItem('userToken');
-render(<AppRouter userToken={localToken} />, document.getElementById('app'))
+let localUserToken = localStorage.getItem('userToken');
+let localSessionToken = localStorage.getItem('sessionToken');
+render(<AppRouter userToken={localUserToken} sessionToken={localSessionToken} />, document.getElementById('app'))
