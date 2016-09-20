@@ -153,29 +153,19 @@ func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session,
 
 // }
 
-func (sc *SessionCollection) CreateHandler(c echo.Context) error {
+func (sc *SessionCollection) CreateHandler(c echo.Context, userClaims Claims) error {
 	params := &struct {
-		UserToken string `json:"userToken"`
-		AppID     string `json:"appID"`
-		Role      string `json:"role"`
+		AppID string `json:"appID"`
+		Role  string `json:"role"`
 	}{}
 	if err := c.Bind(params); err != nil {
 		return err
-	}
-	// Validate params
-	if params.UserToken == "" {
-		return fmt.Errorf("userToken is required")
 	}
 	if params.AppID == "" {
 		return fmt.Errorf("appID is require")
 	}
 	if params.Role == "" {
 		params.Role = AdminRole
-	}
-	// Decode user token
-	userClaims, err := DecodeClaims(params.UserToken)
-	if err != nil {
-		return err
 	}
 	// Create session claims
 	sessionClaims := Claims{}

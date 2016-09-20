@@ -132,26 +132,18 @@ func (ac AppCollection) get(id string) *App {
 	return ac.apps[id]
 }
 
-func (ac AppCollection) CreateHandler(c echo.Context) error {
+func (ac AppCollection) CreateHandler(c echo.Context, userClaims Claims) error {
 	params := struct {
-		UserToken string `json:"userToken"`
-		ID        string `json:"id"`
+		ID string `json:"id"`
 	}{}
 	if err := c.Bind(&params); err != nil {
 		return err
 	}
 	// Validate params
-	if params.UserToken == "" {
-		return fmt.Errorf("userToken is required")
-	}
 	if !isValidID(params.ID) {
 		return fmt.Errorf("invalid id param")
 	}
-	// Decode user token
-	userClaims, err := DecodeClaims(params.UserToken)
-	if err != nil {
-		return err
-	}
+	// Get user
 	u, err := userClaims.User()
 	if err != nil {
 		return err

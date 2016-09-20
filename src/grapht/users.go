@@ -118,6 +118,30 @@ func (uc *UserCollection) Authenticate(id string, pw string) (*User, error) {
 	return u, nil
 }
 
+func (uc *UserCollection) GetAllHandler(c echo.Context, userClaims Claims) error {
+	currentUser, err := userClaims.User()
+	if err != nil {
+		return err
+	}
+	us := []*User{}
+	for _, u := range users.Users {
+		if u.ID != currentUser.ID {
+			continue
+		}
+		us = append(us, u)
+
+	}
+	return c.JSON(http.StatusOK, us)
+}
+
+func (uc *UserCollection) GetHandler(c echo.Context, userClaims Claims) error {
+	u, err := userClaims.User()
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, u)
+}
+
 func (uc *UserCollection) CreateHandler(c echo.Context) error {
 	params := struct {
 		ID       string `json:"id"`

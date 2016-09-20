@@ -7,9 +7,7 @@ var Grapht = require('../index.js');
 var host = "localhost:8282";
 var APP_ID = "jstest";
 
-var userToken;
-var adminSessionToken;
-var guestSessionToken;
+var adminToken;
 
 var admin;
 var guest;
@@ -39,6 +37,23 @@ test("authenticate admin", function(t){
 		password: "p4sswerd%",
 	}).then(function({userToken}){
 		t.ok(userToken, 'should return userToken');
+		adminToken = userToken;
+	});
+})
+
+test("GET /user", function(t){
+	return client.getUser({
+		userToken: adminToken
+	}).then(function(u){
+		t.same(u, {
+			id: "admin",
+			email: "admin@example.com",
+			apps: [
+				{ id: APP_ID, role: "admin" },
+				{ id: APP_ID, role: "guest" }
+			],
+			password: "p4sswerd%",
+		})
 	});
 })
 

@@ -29,6 +29,10 @@ export default class Client {
 		return this._post(`/apps`, o)
 	}
 
+	getUser({userToken}){
+		return this._get(`/user`, {userToken})
+	}
+
 	connect({userID,password,appID,sessionToken,userToken}){
 		if( sessionToken ){
 			return this.connectSession({sessionToken});
@@ -44,42 +48,6 @@ export default class Client {
 		}).then(({sessionToken}) => {
 			return this.connectSession({sessionToken});
 		});
-	}
-
-	_abs(path){
-		return `//${this.host}${path}`;
-	}
-
-	_responseTextError(res){
-		return res.text().then((err) => {
-			return Promise.reject(new Error(err));
-		});
-	}
-
-	_fetch(method, path, data){
-		let opts = {
-			method: method,
-			headers: REQUEST_HEADERS,
-			body: JSON.stringify(data),
-		};
-		if( data ){
-			opts.body = JSON.stringify(data);
-		}
-		return fetch(this._abs(path), opts).then((res) => {
-			if( res.status >= 200 && res.status < 300 ){
-				return res.json();
-			} else {
-				return this._responseTextError(res)
-			}
-		});
-	}
-
-	_post(path, data){
-		return this._fetch('POST', path, data);
-	}
-
-	_get(path, data){
-		return this._fetch('GET', path);
 	}
 
 	connectSession({sessionToken}){ // returns Promise<Connection>
@@ -115,6 +83,51 @@ export default class Client {
 
 	createSession(o){ // returns Promise<Session>
 		return this._post(`/sessions`, o)
+	}
+
+	_abs(path){
+		return `//${this.host}${path}`;
+	}
+
+	_responseTextError(res){
+		return res.text().then((err) => {
+			return Promise.reject(new Error(err));
+		});
+	}
+
+	_fetch(method, path, data){
+		let opts = {
+			method: method,
+			headers: REQUEST_HEADERS,
+			body: JSON.stringify(data),
+		};
+		if( data ){
+			if( data.userToken ){
+				let userToken = data.userToken;
+				delete data.userToken;
+				opts.headers = Object.assign(opts.headers,{
+					Authorization: `Bearer ${userToken}`
+				});
+			}
+			if( method != 'GET' ){
+				opts.body = JSON.stringify(data);
+			}
+		}
+		return fetch(this._abs(path), opts).then((res) => {
+			if( res.status >= 200 && res.status < 300 ){
+				return res.json();
+			} else {
+				return this._responseTextError(res)
+			}
+		});
+	}
+
+	_post(path, data){
+		return this._fetch('POST', path, data);
+	}
+
+	_get(path, data){
+		return this._fetch('GET', path);
 	}
 }
 

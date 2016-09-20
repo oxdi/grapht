@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/facebookgo/grace/gracehttp"
 	"github.com/labstack/echo"
@@ -28,6 +29,30 @@ type WireMsg struct {
 	Data         interface{}            `json:"data,omitempty"`
 }
 
+type HandlerWithClaims func(echo.Context, Claims) error
+
+func WrapClaims(h HandlerWithClaims) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// get Authorization header
+		auth := c.Request().Header().Get("Authorization")
+		if auth == "" {
+			return fmt.Errorf("missing Authorization header")
+		}
+		parts := strings.SplitN(auth, "Bearer", 2)
+		if len(parts) < 2 {
+			return fmt.Errorf("invalid Authorization header %v", parts)
+		}
+		token := strings.TrimSpace(parts[1])
+		// Decode user token
+		claims, err := DecodeClaims(token)
+		if err != nil {
+			fmt.Println("badtoken", token)
+			return err
+		}
+		return h(c, claims)
+	}
+}
+
 func StartServer() error {
 	e := echo.New()
 	e.Use(middleware.CORS())
@@ -37,12 +62,14 @@ func StartServer() error {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Socket api
-	e.POST("/users", users.CreateHandler)
+	// REST api
 	e.POST("/authenticate", users.AuthenticateHandler)
-	e.POST("/apps", apps.CreateHandler)
-	e.POST("/sessions", sessions.CreateHandler)
-	// e.GET("/sessions/:id", sessions.GetHandler)
+	e.POST("/users", users.CreateHandler)
+	e.GET("/users", WrapClaims(users.GetAllHandler))
+	e.GET("/user", WrapClaims(users.GetHandler))
+	e.POST("/apps", WrapClaims(apps.CreateHandler))
+	e.POST("/sessions", WrapClaims(sessions.CreateHandler))
+	// Socket api
 	e.GET("/connect", func(c echo.Context) error {
 		err := sessions.ConnectHandler(c)
 		if err != nil {
