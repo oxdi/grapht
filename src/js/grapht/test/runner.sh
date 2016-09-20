@@ -8,7 +8,8 @@ trap 'cleanup' EXIT
 
 (
 	cd ../../../ &&
-	rm data/jstest;
+	rm -f data/jstest;
+	rm -f data/users.json;
 	./bin/grapht >data/jstest.testlog &
 ) && xvfb-run npm test
 

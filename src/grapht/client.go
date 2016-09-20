@@ -7,6 +7,19 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+func send(ws *websocket.Conn, msg *WireMsg) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	fmt.Println("SEND", string(data))
+	if err := websocket.Message.Send(ws, string(data)); err != nil {
+		return err
+	}
+	return nil
+
+}
+
 type Client struct {
 	ws            *websocket.Conn
 	subscriptions map[string]func()
@@ -14,15 +27,7 @@ type Client struct {
 }
 
 func (c *Client) Send(msg *WireMsg) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	fmt.Println("SEND", string(data))
-	if err := websocket.Message.Send(c.ws, string(data)); err != nil {
-		return err
-	}
-	return nil
+	return send(c.ws, msg)
 }
 
 func (c *Client) OnMessage(msg *WireMsg) error {

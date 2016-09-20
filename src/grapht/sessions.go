@@ -24,7 +24,7 @@ type Session struct {
 func (s *Session) OnChange() {
 	for _, client := range s.clients {
 		for _, onChange := range client.subscriptions {
-			go onChange()
+			onChange()
 		}
 	}
 }
@@ -54,16 +54,27 @@ type SessionCollection struct {
 	sessions []*Session
 }
 
-func (s SessionCollection) Get(id string) (*Session, error) {
-	for _, session := range s.sessions {
-		if session.ID == id {
-			return session, nil
+func (sc SessionCollection) Get(sid string) *Session {
+	for _, session := range sc.sessions {
+		if session.ID == sid {
+			return session
 		}
 	}
-	return nil, fmt.Errorf("no session found")
+	return nil
+}
+
+func (sc *SessionCollection) Exists(sid string) bool {
+	s := sc.Get(sid)
+	return s != nil
 }
 
 func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session, error) {
+	if !isValidID(sid) {
+		return nil, fmt.Errorf("failed to create session: invalid id")
+	}
+	if sc.Exists(sid) {
+		return nil, fmt.Errorf("failed to create session: already exists")
+	}
 	// Get user
 	u, err := sessionClaims.User()
 	if err != nil {
@@ -100,45 +111,53 @@ func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session,
 	return session, nil
 }
 
-func (sc *SessionCollection) GetHandler(c echo.Context) error {
-	id := c.Param("id")
-	if id == "" {
-		return fmt.Errorf("id path param is required")
-	}
-	app, _ := apps.Get(id)
-	if app == nil {
-		return fmt.Errorf("only guest app sessions can be fetched")
-	}
-	session, err := sc.Get(id)
-	if err != nil {
-		return err
-	}
-	if session == nil {
-		return fmt.Errorf("nil session")
-	}
-	guestClaims := Claims{
-		"uid": "guest",
-		"aid": id,
-		"sid": id,
-	}
-	t, err := EncodeClaims(guestClaims)
-	if err != nil {
-		return err
-	}
-	res := struct {
-		SessionToken string `json:"sessionToken"`
-	}{
-		SessionToken: t,
-	}
-	// return sessionToken
-	return c.JSON(http.StatusCreated, res)
+// func (sc *SessionCollection) GetHandler(c echo.Context) error {
+// 	token := c.QueryParam("userToken")
+// 	if token == "" {
+// 		return fmt.Errorf("userToken is required")
+// 	}
+// 	userClaims, err := DecodeClaims(token)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	u, err := userClaims.User()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	id := c.Param("id")
+// 	if id == "" {
+// 		return fmt.Errorf("id path param is required")
+// 	}
+// 	app, _ := apps.Get(id)
+// 	if app == nil {
+// 		return fmt.Errorf("only guest app sessions can be fetched")
+// 	}
+// 	// create claim to a guest session for app with a consistant sid (appID)
+// 	guestClaims := Claims{
+// 		"uid":  u.ID,
+// 		"aid":  app.ID,
+// 		"sid":  app.ID,
+// 		"role": GuestRole,
+// 	}
+// 	t, err := EncodeClaims(guestClaims)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	res := struct {
+// 		SessionToken string `json:"sessionToken"`
+// 	}{
+// 		SessionToken: t,
+// 	}
+// 	// return sessionToken
+// 	return c.JSON(http.StatusCreated, res)
 
-}
+// }
 
 func (sc *SessionCollection) CreateHandler(c echo.Context) error {
 	params := &struct {
 		UserToken string `json:"userToken"`
 		AppID     string `json:"appID"`
+		Role      string `json:"role"`
 	}{}
 	if err := c.Bind(params); err != nil {
 		return err
@@ -149,6 +168,9 @@ func (sc *SessionCollection) CreateHandler(c echo.Context) error {
 	}
 	if params.AppID == "" {
 		return fmt.Errorf("appID is require")
+	}
+	if params.Role == "" {
+		params.Role = AdminRole
 	}
 	// Decode user token
 	userClaims, err := DecodeClaims(params.UserToken)
@@ -161,12 +183,8 @@ func (sc *SessionCollection) CreateHandler(c echo.Context) error {
 		sessionClaims[k] = v
 	}
 	sessionClaims["aid"] = params.AppID
-	// Create a session
-	session, err := sessions.Create(uuid.TimeUUID().String(), sessionClaims)
-	if err != nil {
-		return err
-	}
-	sessionClaims["sid"] = session.ID
+	sessionClaims["role"] = params.Role
+	sessionClaims["sid"] = uuid.TimeUUID().String()
 	// Encode session claims
 	t, err := EncodeClaims(sessionClaims)
 	if err != nil {
@@ -187,29 +205,42 @@ func (sc *SessionCollection) ConnectHandler(c echo.Context) error {
 	}{
 		SessionToken: c.QueryParam("sessionToken"),
 	}
-	// Validate params
-	if params.SessionToken == "" {
-		return fmt.Errorf("sessionToken is required")
-	}
-	// Decode user token
-	sessionClaims, err := DecodeClaims(params.SessionToken)
-	if err != nil {
-		return err
-	}
-	// Lookup the session
-	session, err := sessionClaims.Session()
-	if err != nil {
-		return err
-	}
 	// call the websocket handler
 	return standard.WrapHandler(websocket.Handler(func(ws *websocket.Conn) {
+		fatal := func(err error) error {
+			send(ws, &WireMsg{
+				Type:  "fatal",
+				Error: err.Error(),
+			})
+			return err
+		}
+		// Validate params
+		if params.SessionToken == "" {
+			fatal(fmt.Errorf("sessionToken is required"))
+			return
+		}
+		// Decode user token
+		sessionClaims, err := DecodeClaims(params.SessionToken)
+		if err != nil {
+			fatal(err)
+			return
+		}
+		// Lookup the session
+		session, err := sessionClaims.Session()
+		if err != nil {
+			fatal(err)
+			return
+		}
 		client := session.Connect(ws)
 		defer func() {
 			session.Disconnect(client)
 		}()
-		err := client.AcceptLoop()
-		if err != nil {
-			fmt.Println("socket closed unexpectly", err)
+		send(ws, &WireMsg{
+			Type: "ok",
+		})
+		if err := client.AcceptLoop(); err != nil {
+			fatal(err)
+			return
 		}
 	}))(c)
 }

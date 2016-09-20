@@ -6,10 +6,20 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 
 	"github.com/labstack/echo"
 )
+
+var validIDMatch = regexp.MustCompile(`^([A-Za-z0-9\-_])+$`)
+
+func isValidID(id string) bool {
+	if !validIDMatch.MatchString(id) {
+		return false
+	}
+	return true
+}
 
 type App struct {
 	ID string `json:"id"`
@@ -17,7 +27,7 @@ type App struct {
 }
 
 var apps = &AppCollection{
-	DataDir: "./data/",
+	DataDir: DATA_DIR,
 	apps:    map[string]*App{},
 }
 
@@ -28,6 +38,9 @@ type AppCollection struct {
 }
 
 func (ac AppCollection) path(id string) string {
+	if !isValidID(id) {
+		panic("invalid id for path")
+	}
 	if id == "" {
 		panic("id cannot be empty")
 	}
@@ -43,6 +56,9 @@ func (ac AppCollection) path(id string) string {
 }
 
 func (ac AppCollection) Create(id string) (*App, error) {
+	if !isValidID(id) {
+		return nil, fmt.Errorf("cannot create app: invalid id")
+	}
 	if ac.Exists(id) {
 		return nil, fmt.Errorf("app already exists with that id")
 	}
@@ -50,6 +66,9 @@ func (ac AppCollection) Create(id string) (*App, error) {
 }
 
 func (ac AppCollection) Destroy(id string) error {
+	if !isValidID(id) {
+		return fmt.Errorf("cannot destroy app: invalid id")
+	}
 	app := ac.apps[id]
 	if app != nil {
 		app.DB.Close()
@@ -59,6 +78,9 @@ func (ac AppCollection) Destroy(id string) error {
 }
 
 func (ac AppCollection) Get(id string) (*App, error) {
+	if !isValidID(id) {
+		return nil, fmt.Errorf("cannot get app: invalid id")
+	}
 	d := ac.get(id)
 	if d != nil {
 		return d, nil
@@ -70,6 +92,9 @@ func (ac AppCollection) Get(id string) (*App, error) {
 }
 
 func (ac AppCollection) Exists(id string) bool {
+	if !isValidID(id) {
+		return false
+	}
 	if _, err := os.Stat(ac.path(id)); err != nil {
 		return false
 	}
@@ -77,6 +102,9 @@ func (ac AppCollection) Exists(id string) bool {
 }
 
 func (ac AppCollection) open(id string) (*App, error) {
+	if !isValidID(id) {
+		return nil, fmt.Errorf("cannot open: invalid id")
+	}
 	ac.Lock()
 	defer ac.Unlock()
 	// check cache
@@ -94,17 +122,7 @@ func (ac AppCollection) open(id string) (*App, error) {
 		ID: id,
 		DB: database,
 	}
-	// create the guest session
-	guestClaims := Claims{
-		"uid": "guest",
-		"aid": app.ID,
-		"sid": app.ID,
-	}
 	ac.apps[id] = app
-	_, err = sessions.Create(app.ID, guestClaims)
-	if err != nil {
-		return nil, err
-	}
 	return app, nil
 }
 
@@ -126,8 +144,8 @@ func (ac AppCollection) CreateHandler(c echo.Context) error {
 	if params.UserToken == "" {
 		return fmt.Errorf("userToken is required")
 	}
-	if params.ID == "" {
-		return fmt.Errorf("appID is required")
+	if !isValidID(params.ID) {
+		return fmt.Errorf("invalid id param")
 	}
 	// Decode user token
 	userClaims, err := DecodeClaims(params.UserToken)
@@ -144,6 +162,13 @@ func (ac AppCollection) CreateHandler(c echo.Context) error {
 	// Create app
 	app, err := ac.Create(params.ID)
 	if err != nil {
+		return err
+	}
+	// Grant permission to user
+	if err := u.GrantAppRole(app.ID, AdminRole); err != nil {
+		return err
+	}
+	if err := u.GrantAppRole(app.ID, GuestRole); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusCreated, app)

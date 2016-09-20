@@ -17,29 +17,49 @@ func (c Claims) User() (*User, error) {
 	return users.Get(id)
 }
 
+func (c Claims) Role() (string, error) {
+	role, ok := c["role"].(string)
+	if !ok {
+		return "", fmt.Errorf("no role in claims")
+	}
+	switch role {
+	case AdminRole:
+		return AdminRole, nil
+	case GuestRole:
+		return GuestRole, nil
+	default:
+		return "", fmt.Errorf("invalid role in claims")
+	}
+}
+
 func (c Claims) App() (*App, error) {
 	u, err := c.User()
 	if err != nil {
 		return nil, err
 	}
-	id, ok := c["aid"].(string)
+	appID, ok := c["aid"].(string)
 	if !ok {
 		return nil, fmt.Errorf("no aid in claims")
 	}
-	// TODO: check if user is authorized to use app
-	if u.ID != "chrisfarms" {
-		fmt.Println("TODO: check if user is authorized to use app")
-		// return nil, fmt.Errorf("only chrisfarms can do stuff")
+	role, err := c.Role()
+	if err != nil {
+		return nil, err
 	}
-	return apps.Get(id)
+	if !u.HasAppRole(appID, role) {
+		return nil, fmt.Errorf("user '%s' does not have '%s' role for '%s'", u.ID, role, appID)
+	}
+	return apps.Get(appID)
 }
 
 func (c Claims) Session() (*Session, error) {
-	id, ok := c["sid"].(string)
+	sid, ok := c["sid"].(string)
 	if !ok {
 		return nil, fmt.Errorf("no sid in claims")
 	}
-	return sessions.Get(id)
+	if sessions.Exists(sid) {
+		return sessions.Get(sid), nil
+	}
+	return sessions.Create(sid, c)
 }
 
 func EncodeClaims(claims Claims) (string, error) {

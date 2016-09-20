@@ -1,22 +1,63 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/labstack/echo"
 )
 
+const (
+	GuestRole = "guest"
+	AdminRole = "admin"
+)
+
+type AppPermission struct {
+	ID   string `json:"id"`
+	Role string `json:"role"`
+}
+
 type User struct {
-	ID        string   `json:"id,omitempty"`
-	Password  string   `json:"password,omitempty"`
-	Email     string   `json:"email,omitempty"`
-	Databases []string `json:"-"`
-	Guest     bool     `json:"guest,omitempty"`
+	ID       string           `json:"id,omitempty"`
+	Password string           `json:"password,omitempty"`
+	Email    string           `json:"email,omitempty"`
+	Apps     []*AppPermission `json:"apps,omitempty"`
+	Guest    bool             `json:"guest,omitempty"`
+}
+
+func (u *User) HasAppRole(appID string, role string) bool {
+	for _, perm := range u.Apps {
+		if perm.ID == appID && perm.Role == role {
+			return true
+		}
+	}
+	return false
+}
+
+func (u *User) GrantAppRole(appID string, role string) error {
+	if !isValidID(appID) {
+		return fmt.Errorf("invalid id")
+	}
+	if role == "" {
+		return fmt.Errorf("invalid role")
+	}
+	if u.HasAppRole(appID, role) {
+		return nil
+	}
+	u.Apps = append(u.Apps, &AppPermission{
+		ID:   appID,
+		Role: role,
+	})
+	return users.Save()
 }
 
 type UserCollection struct {
-	users []*User
+	Users    []*User `json:"users"`
+	filename string
 }
 
 func (uc *UserCollection) Create(newUser *User) (*User, error) {
@@ -32,21 +73,35 @@ func (uc *UserCollection) Create(newUser *User) (*User, error) {
 	if newUser.Email == "" {
 		return nil, fmt.Errorf("email is required")
 	}
-	u, _ := uc.Get(newUser.ID)
-	if u != nil {
+	if u, _ := uc.Get(newUser.ID); u != nil {
 		return nil, fmt.Errorf("id already exists")
 	}
-	uc.users = append(uc.users, newUser)
+	if u, _ := uc.GetByEmail(newUser.Email); u != nil {
+		return nil, fmt.Errorf("id already exists")
+	}
+	uc.Users = append(uc.Users, newUser)
+	if err := uc.Save(); err != nil {
+		return nil, err
+	}
 	return newUser, nil
 }
 
 func (uc *UserCollection) Get(id string) (*User, error) {
-	for _, u := range uc.users {
+	for _, u := range uc.Users {
 		if u.ID == id {
 			return u, nil
 		}
 	}
 	return nil, fmt.Errorf("cannot get user for that id")
+}
+
+func (uc *UserCollection) GetByEmail(email string) (*User, error) {
+	for _, u := range uc.Users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot get user for that email")
 }
 
 func (uc *UserCollection) Authenticate(id string, pw string) (*User, error) {
@@ -132,17 +187,52 @@ func (uc *UserCollection) AuthenticateHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-var users = &UserCollection{
-	users: []*User{
-		&User{
-			ID:       "guest",
-			Password: "guest",
-			Guest:    true,
-		},
-		&User{
-			ID:        "chrisfarms",
-			Password:  "ncd78781",
-			Databases: []string{"example", "farmsdb"},
-		},
-	},
+func (uc *UserCollection) Save() error {
+	b, err := json.Marshal(uc.Users)
+	if err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(uc.filename, b, 0644); err != nil {
+		return err
+	}
+	return nil
+}
+
+func LoadUsers(filename string) (*UserCollection, error) {
+	uc := &UserCollection{
+		filename: filename,
+	}
+	// warn if missing
+	if _, err := os.Stat(uc.filename); os.IsNotExist(err) {
+		fmt.Println("WARNING: no users file...creating")
+		b := []byte("[]")
+		if err := ioutil.WriteFile(uc.filename, b, 0644); err != nil {
+			return nil, fmt.Errorf("failed to create %s: %s", uc.filename, err.Error())
+		}
+	}
+	// read file
+	b, err := ioutil.ReadFile(uc.filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s: %s", uc.filename, err.Error())
+	}
+	if err := json.Unmarshal(b, &uc.Users); err != nil {
+		return nil, fmt.Errorf("failed to load %s: corrupt", uc.filename)
+	}
+	// add the guest user
+	uc.Users = append(uc.Users, &User{
+		ID:       "guest",
+		Password: "guest",
+		Guest:    true,
+	})
+	return uc, nil
+}
+
+var users *UserCollection
+
+func init() {
+	uc, err := LoadUsers(filepath.Join(DATA_DIR, "users.json"))
+	if err != nil {
+		panic(err)
+	}
+	users = uc
 }

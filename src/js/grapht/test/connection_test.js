@@ -90,14 +90,23 @@ test("initial database state", function(t){
 	})
 })
 
-test("fetch guest session token", function(t){
-	return client.getGuestSession(
-		APP_ID
-	).then(function({sessionToken}){
-		t.ok(sessionToken,'should return sessionToken');
-		return client.connect({sessionToken});
+test("create guest session token based on admin", function(t){
+	return client.authenticate({
+		id: "admin",
+		password: "p4sswerd%",
+	}).then(function({userToken}){
+		return client.createSession({
+			userToken: userToken,
+			appID: APP_ID,
+			role: "guest",
+		})
+	}).then(function({sessionToken}){
+		t.ok(sessionToken, 'should return sessionToken');
+		return client.connectSession({
+			sessionToken: sessionToken
+		});
 	}).then(function(conn){
-		t.ok(conn.setType);
+		t.ok(conn.setType, 'should return conn');
 		guest = conn;
 	})
 })

@@ -42,7 +42,7 @@ func StartServer() error {
 	e.POST("/authenticate", users.AuthenticateHandler)
 	e.POST("/apps", apps.CreateHandler)
 	e.POST("/sessions", sessions.CreateHandler)
-	e.GET("/sessions/:id", sessions.GetHandler)
+	// e.GET("/sessions/:id", sessions.GetHandler)
 	e.GET("/connect", func(c echo.Context) error {
 		err := sessions.ConnectHandler(c)
 		if err != nil {

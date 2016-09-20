@@ -10,6 +10,7 @@ import (
 const (
 	AUTH_SECRET = "OuwfjE6rJcMOZjOpsW15QlXWLxLzYGjxTgkVK"
 	SERVER_PORT = 8282
+	DATA_DIR    = "./data/"
 )
 
 func Open() {

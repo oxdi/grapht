@@ -82,10 +82,6 @@ export default class Client {
 		return this._fetch('GET', path);
 	}
 
-	getGuestSession(appID){
-		return this._get(`/sessions/${appID}`)
-	}
-
 	connectSession({sessionToken}){ // returns Promise<Connection>
 		if( !sessionToken ){
 			return Promise.reject(new Error('sessionToken is required'));
@@ -102,10 +98,14 @@ export default class Client {
 				reject(e);
 				return;
 			}
-			ws.onopen = () => {
-				ws.onerror = () => {};
-				let conn = new Connection(ws);
-				resolve(conn);
+			ws.onmessage = (evt) => {
+				let msg = JSON.parse(evt.data);
+				if( msg.type == 'fatal' ){
+					reject(new Error(msg.error))
+				} else if( msg.type == 'ok' ){
+					let conn = new Connection(ws);
+					resolve(conn);
+				}
 			}
 			ws.onerror = () => {
 				reject(new Error('connection failed'));
