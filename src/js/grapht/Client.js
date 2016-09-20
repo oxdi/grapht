@@ -99,7 +99,6 @@ export default class Client {
 		let opts = {
 			method: method,
 			headers: REQUEST_HEADERS,
-			body: JSON.stringify(data),
 		};
 		if( data ){
 			if( data.userToken ){
@@ -127,7 +126,7 @@ export default class Client {
 	}
 
 	_get(path, data){
-		return this._fetch('GET', path);
+		return this._fetch('GET', path, data);
 	}
 }
 

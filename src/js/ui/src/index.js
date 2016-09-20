@@ -35,103 +35,68 @@ import {Client} from 'grapht';
 let client = new Client({host:'toolbox.oxdi.eu:8282'});
 window.graphtClient = client;
 
-class App extends React.Component {
+class Component extends React.Component {
 
 	static contextTypes = {
-		router: React.PropTypes.object.isRequired,
-	};
-
-	state = {data: null, loading: true};
-
-	componentDidMount(){
-		if( !this.state.credentials ){
-			let credentials = this.loadCredentials();
-			if( credentials ){
-				this.connect(credentials)
-					.then(() => this.setState({loading:false}))
-					.catch(() => this.setState({loading:false}))
-				return;
-			}
-		}
-		this.setState({loading:false});
+		base: PropTypes.object.isRequired,
+		router: React.PropTypes.object,
+		conn: React.PropTypes.object,
 	}
 
-	loadCredentials(){
-		try{
-			let credentials = localStorage.getItem('credentials');
-			if( credentials ){
-				return JSON.parse(credentials);
-			}
-			return null;
-		}catch(err){
-			console.error(err);
-			return null;
-		}
+	addToast(err,action){
+		console.log('adding toast', this.context, err);
+		this.context.base.addToast(err, action);
 	}
 
-	onError = (err) => {
-		this.setState({error: err});
-		console.error('onError', err);
+	go(path, params){
+		this.context.router.push(path);
 	}
 
-	onQueryData = (data) => {
-		this.setState({data: data});
-	}
-
-	onQueryError = (err) => {
-		this.setState({error: err});
-		console.error('onQueryError', err);
-	}
-
-	onConnectionStateChange = (online) => {
-		let data = this.state.data;
-		if( !online ){
-			data = null;
-
-		}
-		this.setState({
-			online,
-			data
+	store(tx){
+		let conn = this.context.conn;
+		return tx(conn).then(() => {
+			conn.commit();
+		}).catch(err => {
+			this.addToast(err);
 		});
 	}
 
-	onAuthStateChange = (credentials) => {
-		this.setState({credentials: credentials});
-		localStorage.setItem('credentials', JSON.stringify(credentials));
+}
+
+class App extends Component {
+
+	static propTypes = {
+		id: PropTypes.string,
+		conn: PropTypes.object.isRequired,
 	}
 
-	register = (details) => {
-		return register(details)
-			.then((credentials) => {
-				this.connect(credentials);
-			})
-			.catch(this.onError)
+	state = {data: null};
+
+	componentDidMount(){
+		this.subscribe();
 	}
 
-	dialog = (el) => {
-		this.setState({dialog: el});
+	componentWillReceiveProps(nextProps){
+		if( nextProps.conn != this.props.conn ){
+			this.subscribe();
+		}
 	}
 
-	connect = (credentials) => {
-		return store.connect(credentials)
-			.then(() => {
-				this.onAuthStateChange(credentials);
-				this.onConnectionStateChange(true);
-				store.router = this.context.router;
-				store.dialog = this.dialog
-				store.onAuthStateChange = this.onAuthStateChange
-				store.onConnectionStateChange = this.onConnectionStateChange
-				return store.subscribe('main', this.getQuery())
-			})
-			.then((query) => {
-				query.on('data', this.onQueryData);
-				query.on('error', this.onQueryError);
-			})
-			.catch((err) => {
-				this.onError(err);
-				this.onAuthStateChange(null);
-				this.onConnectionStateChange(false);
-			})
+	subscribe(){
+		return this.props.conn.subscribe('main', this.getQuery()).then((query) => {
+			query.on('data', this._onQueryData);
+			query.on('error', this._onQueryError);
+		}).catch((err) => {
+			this.addToast(err);
+		})
+	}
+
+	_onQueryData = (data) => {
+		this.setState({data: data});
+	}
+
+	_onQueryError = (err) => {
+		this.addToast(err);
 	}
 
 	getQuery(){
@@ -170,10 +135,8 @@ class App extends React.Component {
 	}
 
 	logout(){
-		store.close().then(() => {
-			this.setState({credentials: null});
-			localStorage.setItem('credentials', null);
-		})
+		localStorage.clear();
+		this.props.onCloseSession();
 	}
 
 
@@ -181,16 +144,16 @@ class App extends React.Component {
 		let router = this.context.router;
 		return [{
 			primaryText: 'Types',
-			onClick: () => store.navigate('/types'),
+			onClick: () => this.go('/types'),
 		},{
 			primaryText: 'Content',
-			onClick: () => store.navigate('/content'),
+			onClick: () => this.go('/content'),
 		},{
 			primaryText: 'Settings',
-			onClick: () => store.navigate('/settings'),
+			onClick: () => this.go('/settings'),
 		},{
 			primaryText: 'Audit Trail',
-			onClick: () => store.navigate('/settings'),
+			onClick: () => this.go('/settings'),
 		},{
 			primaryText: 'logout',
 			onClick: () => this.logout(),
@@ -210,20 +173,6 @@ class App extends React.Component {
 	}
 
 	render(){
-		if( this.state.loading ){
-			return <div>loading</div>;
-		}
-		if( !this.state.credentials ){
-			return (
-				<div>
-					<button onClick={() => this.connect({username:"guest",password:"guest",appID:"example"})}>login</button>
-					<button onClick={() => this.register({username:"admin",password:"admin",appID:"example",email:"admin@example.com"})}>register</button>
-				</div>
-			);
-		}
-		if( !this.state.online ){
-			return <div>OFFLINE</div>;
-		}
 		if( !this.state.data ){
 			return <div>NO DATA</div>;
 		}
@@ -237,14 +186,12 @@ class App extends React.Component {
 		let onlineMessage = this.state.online ? 'online' : 'offline';
 		return (
 			<UI.NavigationDrawer
-				drawerTitle="Structura"
+				drawerTitle={this.props.id}
 				toolbarTitle={onlineMessage}
 				tabletDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				desktopDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
 				navItems={this.sidebarItems()}
-				drawerChildren={<div>HELLO</div>}
 				toolbarChildren={this.toolbarItems()}>
-				{this.state.dialog}
 				{section}
 			</UI.NavigationDrawer>
 		);
@@ -265,24 +212,16 @@ const TypeIcon = ({type}) => {
 	return <Icon name="collections"/>;
 }
 
-class CreateTypeDialog extends React.Component {
+class CreateTypeDialog extends Component {
 
 	state = {error: null};
 
-	onSubmit = () => {
-		store.setType({
-			name: this.refs.name.state.value,
+	_onSubmit = () => {
+		this.store(conn => {
+			return conn.setType({
+				name: this.refs.name.state.value,
+			})
 		})
-		.then(this.onCreate)
-		.catch(this.onError)
-	}
-
-	onCreate = () => {
-		store.dialog();
-	}
-
-	onError = (err) => {
-		this.setState({error: err.toString()});
 	}
 
 	render(){
@@ -291,10 +230,10 @@ class CreateTypeDialog extends React.Component {
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
 			actions={[{
-				onClick: () => store.dialog(),
+				onClick: () => {},
 				label: 'Cancel',
 			}, {
-				onClick: this.onSubmit,
+				onClick: this._onSubmit,
 				primary: true,
 				label: 'OK',
 			}]}
@@ -304,7 +243,7 @@ class CreateTypeDialog extends React.Component {
 	}
 }
 
-class CreateFieldDialog extends React.Component {
+class CreateFieldDialog extends Component {
 
 	state = {error: null};
 
@@ -315,17 +254,9 @@ class CreateFieldDialog extends React.Component {
 			name: this.refs.name.state.value,
 			type: this.refs.type.state.value,
 		})
-		store.setType(type)
-			.then(this.onCreate)
-			.catch(this.onError)
-	}
-
-	onCreate = () => {
-		store.dialog();
-	}
-
-	onError = (err) => {
-		this.setState({error: err.toString()});
+		this.store(conn => {
+			return conn.setType(type)
+		})
 	}
 
 	render(){
@@ -335,10 +266,10 @@ class CreateFieldDialog extends React.Component {
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
 			actions={[{
-				onClick: () => store.dialog(),
+				onClick: () => {},
 				label: 'Cancel',
 			}, {
-				onClick: this.onSubmit,
+				onClick: this._onSubmit,
 				primary: true,
 				label: 'OK',
 			}]}
@@ -399,18 +330,18 @@ class CreateContentDialog extends React.Component {
 		this.setState({node: node});
 	}
 
-	onSubmit = () => {
-		store.setNode(this.state.node)
-			.then(this.onCreate)
-			.catch(this.onError)
+	_onSubmit = () => {
+		this.store(conn => {
+			return conn.setNode(this.state.node)
+				.then(this._onCreate)
+		})
 	}
 
-	onCreate = () => {
-		store.dialog();
-		store.navigate(`/content/${this.state.node.id}`);
+	_onCreate = () => {
+		this.go(`/content/${this.state.node.id}`);
 	}
 
-	onError = (err) => {
+	_onError = (err) => {
 		this.setState({error: err.toString()});
 	}
 
@@ -421,10 +352,10 @@ class CreateContentDialog extends React.Component {
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
 			actions={[{
-				onClick: () => store.dialog(),
+				onClick: () => {},
 				label: 'Cancel',
 			}, {
-				onClick: this.onSubmit,
+				onClick: this._onSubmit,
 				primary: true,
 				label: 'OK',
 			}]}
@@ -463,7 +394,7 @@ const TypeItem = ({type}) => (
 		rightIcon={<UI.FontIcon>info</UI.FontIcon>}
 		primaryText={type.name}
 		secondaryText="Custom Type"
-		onClick={() => store.navigate(`/types/${type.name}`)}
+		onClick={() => this.go(`/types/${type.name}`)}
 	/>
 )
 
@@ -488,7 +419,9 @@ class FieldExpansionPanel extends React.Component {
 		for(let k in this.state.field){
 			f[k] = this.state.field[k];
 		}
-		store.setType(this.props.type);
+		this.store(conn => {
+			return conn.setType(this.props.type);
+		})
 	}
 
 	render(){
@@ -499,7 +432,7 @@ class FieldExpansionPanel extends React.Component {
 				secondaryLabel={[
 					this.props.field.type,
 				]}
-				onSave={this.onSave}
+				onSave={this._onSave}
 			>
 				<form>
 					<div>
@@ -544,7 +477,6 @@ const TypeEditPane = ({params,data,location}) => {
 				fixed
 				tooltipPosition="top"
 				tooltipLabel="Add Field"
-				onClick={() => store.dialog(<CreateFieldDialog type={type} />)}
 			>add</UI.FloatingButton>
 		</div>
 	);
@@ -560,7 +492,6 @@ const TypesPane = ({params,data,location}) => (
 			fixed
 			tooltipPosition="top"
 			tooltipLabel="Add Type"
-			onClick={() => store.dialog(<CreateTypeDialog />)}
 		>add</UI.FloatingButton>
 	</div>
 );
@@ -727,32 +658,22 @@ class ContentEditPane extends React.Component {
 		values[field.name] = v;
 		this.setState({values,dirty})
 	}
-	// todo: add ye olde numbers
-	// todo: DataTable
-	// 	-> add/remove cols
-	// 	-> add/remove rows
-	// 	-> array-array-string
-	// 	-> first row is
-	// todo: ALL si units
-	// todo: sidebar only
-	// todo: switch back to encoding image info as json
-	// 	-> filename
-	// 	-> default focus (x/y)
-	// 	-> default resize algo
 
-	onSave = () => {
+	_onSave = () => {
 		this.setState({errors:null});
 		console.log('saving ...', this.state.values, this.node);
-		store.setNode({
-			id: this.node.id,
-			type: this.node.type.name,
-			values: this.state.values,
+		this.store(conn => {
+			return conn.setNode({
+				id: this.node.id,
+				type: this.node.type.name,
+				values: this.state.values,
+			})
+			.then(this._afterSave)
+			.catch((err) => this.setState({errors:[err.toString()]}));
 		})
-		.then(this.afterSave)
-		.catch((err) => this.setState({errors:[err.toString()]}));
 	}
 
-	afterSave = () => {
+	_afterSave = () => {
 		this.setState({dirty: false});
 	}
 
@@ -768,24 +689,16 @@ class ContentEditPane extends React.Component {
 	}
 
 	render(){
-		let toasts = (this.state.errors || []).map(e => {
-			return {text: e};
-		})
 		return (
 			<div style={{margin:40}}>
 				<div className="md-card-list">
 					{this.fieldItems()}
 					<UI.Card>
 						<div style={{margin:20}}>
-							<UI.FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this.onSave} />
+							<UI.FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this._onSave} />
 						</div>
 					</UI.Card>
 				</div>
-				<UI.Snackbar
-					toasts={toasts}
-					autohide
-					dismiss={() => this.setState({errors:[]})}
-				/>
 			</div>
 		);
 	}
@@ -814,7 +727,7 @@ const ContentPane = ({params,data,location}) => (
 				</UI.TableRow>
 			</UI.TableHeader>
 			<UI.TableBody>
-				{data.nodes.map(n => <ContentRow key={n.id} node={n} onClick={() => store.navigate(`/content/${n.id}`)} />)}
+				{data.nodes.map(n => <ContentRow key={n.id} node={n} onClick={() => this.go(`/content/${n.id}`)} />)}
 			</UI.TableBody>
 		</UI.DataTable>
 		<UI.FloatingButton
@@ -822,7 +735,6 @@ const ContentPane = ({params,data,location}) => (
 			fixed
 			tooltipPosition="top"
 			tooltipLabel="Add Type"
-			onClick={() => store.dialog(<CreateContentDialog types={data.types} />)}
 		>add</UI.FloatingButton>
 	</div>
 );
@@ -835,73 +747,195 @@ const Home = () => (
 	<div>HOMEY</div>
 );
 
-class Component extends React.Component {
+class SelectApp extends Component {
+
+	static propTypes = {
+		onCreate: PropTypes.func.isRequired,
+		onStartSession: PropTypes.func.isRequired,
+		apps: PropTypes.arrayOf(PropTypes.string),
+	}
+
+	state = {tab:0}
+
+	_submit = (e) => {
+		if( e.preventDefault ){
+			e.preventDefault();
+		}
+		this.props.onCreate({
+			id: this.state.appID
+		})
+	}
+
+	_select = (id) => {
+		this.props.onStartSession({id})
+	}
+
+	_onChangeAppID = (v) => {
+		this.setState({appID: v})
+	}
+
+	_setTab = (idx) => {
+		this.setState({tab: idx})
+	}
+
+	renderActions(){
+		let cancel;
+		if( this.props.onCancel ){
+			cancel = <UI.FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>;
+		}
+		return <div style={{marginLeft:'auto'}}>
+			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>
+			{cancel}
+		</div>;
+	}
+
+	renderCreateTab(){
+		return <div>
+			<p style={{margin:20}}>
+				Create a new application.
+			</p>
+			<div>
+				<UI.TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
+			</div>
+			<div>
+				<UI.Toolbar primary={false} actionsRight={this.renderActions()} />
+			</div>
+		</div>;
+	}
+
+	renderSelectTab(){
+		let apps = this.props.apps;
+		if( !apps || apps.length == 0 ){
+			return <div style={{margin:30}}>
+				<p>You do not currently have any sites. Click on the 'new' tab</p>
+			</div>;
+		}
+		return <UI.List>
+			{apps.map(id => <UI.ListItem key={id} primaryText={id} onClick={this._select.bind(this,id)} />)}
+		</UI.List>;
+	}
+
+	renderTab(){
+		if( this.state.tab == 0 ){
+			console.log(this.state);
+			return this.renderSelectTab();
+		}
+		return this.renderCreateTab();
+	}
+
+	render(){
+		return <form className="md-card-list" onSubmit={this._submit}>
+			<UI.Dialog isOpen close={() => {}} modal>
+				<UI.Tabs centered fixedWidth primary>
+					<UI.Tab label="Open Site" icon={<UI.FontIcon>collections</UI.FontIcon>} onChange={this._setTab} />
+					<UI.Tab label="Create Site" icon={<UI.FontIcon>edit</UI.FontIcon>} onChange={this._setTab} />
+				</UI.Tabs>
+				{this.renderTab()}
+			</UI.Dialog>
+		</form>;
+	}
 
 }
 
 class AppSelector extends Component {
 
 	static propTypes = {
-		userToken: PropTypes.string
+		userToken: PropTypes.string.isRequired,
+		sessionToken: PropTypes.string,
 	}
 
 	state = {user: null}
 
-	componentWillMount(){
-		let userToken = this.props.userToken
-		client.getUser({userToken}).then((u) => {
+	componentDidMount(){
+		this.refresh();
+	}
+
+	refresh(){
+		let userToken = this.props.userToken;
+		return client.getUser({userToken}).then((u) => {
 			this.setState({user: u})
 		}).catch(err => {
-			this.setState({error: err.message})
+			this.addToast(err);
 		})
 	}
 
 	getApps(){
 		let u = this.state.user;
-		if( !u ){
-			return [];
-		}
-		return Object.keys(u.apps.reduce((as,a) => {
+		let apps = u && u.apps ? u.apps : [];
+		return Object.keys(apps.reduce((as,a) => {
 			as[a.id] = a;
 			return as;
-		},{}))
+		},{}));
+	}
+
+	_createApp = ({id}) => {
+		return client.createApp({
+			userToken: this.props.userToken,
+			id,
+		}).then(() => {
+			return this.refresh()
+		}).then(() => {
+			return this._startSession({id})
+		}).catch(err => {
+			this.addToast(`Failed to create app: ${err.message}`);
+		})
+	}
+
+	_closeSession = () => {
+		// return client.closeSession({
+		// 	sessionToken: this.state.sessionToken
+		// })
+		this.setState({conn: null});
+	}
+
+	_startSession = ({id}) => {
+		return client.createSession({
+			appID: id,
+			userToken: this.props.userToken,
+		}).then(({sessionToken}) => {
+			return client.connectSession({sessionToken});
+		}).then((conn) => {
+			console.log('connected', conn);
+			this.setState({id,conn});
+		})
+		.catch(err => {
+			this.addToast(`Failed to create session: ${err.message}`);
+		})
 	}
 
 	render(){
 		let user = this.state.user;
 		if( !user ){
-			return <div>no user</div>;
+			return <div>fetching apps</div>;
 		}
-		let apps = this.getApps();
-		return <div>
-			{apps.map(id => <div key={id}>{id}</div>)}
-		</div>;
+		if( this.state.conn ){
+			return <App id={this.state.id} conn={this.state.conn} onCloseSession={this._closeSession}>
+				{this.props.children}
+			</App>;
+		}
+		return <SelectApp apps={this.getApps()} onStartSession={this._startSession} onCreate={this._createApp}/>
 	}
 }
 
 class Login extends Component {
 
 	static propTypes = {
-		token: PropTypes.string,
+		userToken: PropTypes.string,
 	}
 
-	state = {token: null, tab:0, errors: []}
+	state = {userToken: null, tab:0}
 
 	getToken(){
-		return this.props.token || this.state.token;
+		return this.props.userToken || this.state.userToken;
 	}
 
-	setToken(t){
-		this.setState({token: t});
+	setToken(userToken){
+		localStorage.setItem('userToken', userToken);
+		this.setState({userToken});
 	}
 
 	setError(msg){
-		const errors = this.state.errors.slice();
-		errors.push({
-			key: Date.now(),
-			text: msg,
-		});
-		this.setState({errors});
+		this.addToast(msg);
 	}
 
 	_login = (e) => {
@@ -927,7 +961,14 @@ class Login extends Component {
 			email: this.state.email,
 			password: this.state.password,
 		}).then(({userToken}) => {
-			this.setToken(userToken);
+			return client.createApp({
+				userToken,
+				id: this.state.appID,
+			}).catch(err => {
+				this.setError(`Failed to create app: ${err.message}`);
+			}).then(() => {
+				this.setToken(userToken);
+			})
 		}).catch(err => {
 			this.setError(`Login failed: ${err.message}`)
 		})
@@ -945,14 +986,12 @@ class Login extends Component {
 		this.setState({email: v})
 	}
 
-	_setTab = (idx) => {
-		this.setState({tab: idx})
+	_onChangeAppID = (v) => {
+		this.setState({appID: v})
 	}
 
-	_dismissError = () => {
-		const errors = this.state.errors.slice();
-		errors.shift();
-		this.setState({ errors });
+	_setTab = (idx) => {
+		this.setState({tab: idx})
 	}
 
 	renderLoginForm(){
@@ -987,6 +1026,9 @@ class Login extends Component {
 				<UI.TextField fullWidth label="Email" value={this.state.email} onChange={this._onChangeEmail} />
 			</div>
 			<div>
+				<UI.TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
+			</div>
+			<div>
 				<UI.Toolbar primary={false} actionsRight={actions} />
 			</div>
 		</div>;
@@ -1000,18 +1042,13 @@ class Login extends Component {
 
 	renderLoginDialog(){
 		return <div className="md-card-list">
-			<UI.Dialog isOpen close={() => {}}>
+			<UI.Dialog isOpen close={() => {}} modal>
 				<UI.Tabs centered fixedWidth primary>
 					<UI.Tab label="Login" icon={<UI.FontIcon>face</UI.FontIcon>} onChange={this._setTab} />
 					<UI.Tab label="Register" icon={<UI.FontIcon>edit</UI.FontIcon>} onChange={this._setTab} />
 				</UI.Tabs>
 				{this.renderForm()}
 			</UI.Dialog>
-			<UI.Snackbar
-				toasts={this.state.errors}
-				dismiss={this._dismissError}
-				autohide={true}
-			/>
 		</div>;
 	}
 
@@ -1020,12 +1057,67 @@ class Login extends Component {
 		if( !token ){
 			return this.renderLoginDialog();
 		}
-		return <AppSelector userToken={token} />;
+		return <AppSelector userToken={token}>{this.props.children}</AppSelector>;
 	}
 }
 
-const Routey = () => <Router history={browserHistory}>
-	<Route path="/" component={App}>
+class Base extends React.Component {
+
+	static childContextTypes = {
+		base: PropTypes.object,
+	};
+
+	getChildContext(){
+		return {
+			base: this,
+		}
+	}
+
+	state = {toasts: []}
+
+	_dismissToast = () => {
+		const toasts = this.state.toasts.slice();
+		toasts.shift();
+		this.setState({ toasts });
+	}
+
+	addToast(msg, action){
+		if( !msg ){
+			return;
+		}
+		if( msg.message ){
+			msg = msg.message;
+		}
+		console.error('TOAST', msg);
+		const toasts = this.state.toasts.slice();
+		toasts.push({
+			key: Date.now(),
+			text: msg,
+			action,
+		});
+		this.setState({toasts});
+	}
+
+	render(){
+		return <div>
+			{this.props.children}
+			<UI.Snackbar
+				toasts={this.state.toasts}
+				dismiss={this._dismissToast}
+				autohide={true}
+			/>
+		</div>;
+	}
+}
+
+const Chrome = (props) => <Base>
+	<Login {...props.route}>
+		{props.children}
+	</Login>
+</Base>;
+
+const AppRouter = (props) => <Router history={browserHistory}>
+	<Route path="/" {...props} component={Chrome}>
 		<IndexRoute component={Home}/>
 		<Route path="types" component={TypesPane}/>
 		<Route path="types/:name" component={TypeEditPane}/>
@@ -1035,4 +1127,5 @@ const Routey = () => <Router history={browserHistory}>
 	<Route path="*" component={ErrorPane}/>
 </Router>;
 
-render(<Login />, document.getElementById('app'))
+let localToken = localStorage.getItem('userToken');
+render(<AppRouter userToken={localToken} />, document.getElementById('app'))

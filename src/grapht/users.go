@@ -25,7 +25,7 @@ type User struct {
 	ID       string           `json:"id,omitempty"`
 	Password string           `json:"password,omitempty"`
 	Email    string           `json:"email,omitempty"`
-	Apps     []*AppPermission `json:"apps,omitempty"`
+	Apps     []*AppPermission `json:"apps"`
 	Guest    bool             `json:"guest,omitempty"`
 }
 
