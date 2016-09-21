@@ -17,7 +17,6 @@ import {
 	Avatar,
 	Toolbar,
 	TextField,
-	SelectField,
 	Card, CardTitle, CardMedia,
 	LinearProgress,
 	TableRow,TableColumn,TableHeader,TableBody,DataTable,
@@ -25,11 +24,17 @@ import {
 	Tab,
 	Snackbar,
 	List, ListItem,
+	NavigationDrawer,
+	Paper,
+	CircularProgress,
+	Subheader,
+	Divider,
 } from 'react-md';
 import {
 	ExpansionPanel,
 	ExpansionList
 } from 'react-md/lib/ExpansionPanels';
+import SelectField from 'react-md/lib/SelectFields';
 
 WebFont.load({
 	google: {
@@ -54,44 +59,34 @@ import {Client} from 'grapht';
 let client = new Client({host:'toolbox.oxdi.eu:8282'});
 window.graphtClient = client;
 
+const FloatingAddButton = (props) => <FloatingButton
+	style={{position:'absolute'}}
+	primary
+	fixed
+	tooltipPosition="top"
+	{...props}
+
+>add</FloatingButton>;
+
 class Component extends React.Component {
 
 	static contextTypes = {
-		base: PropTypes.object.isRequired,
-		router: React.PropTypes.object,
-		conn: React.PropTypes.object,
+		addToast: PropTypes.func.isRequired,
+		router: PropTypes.object,
+		conn: PropTypes.object,
+		mobile: PropTypes.bool.isRequired,
+		tablet: PropTypes.bool.isRequired,
+		desktop: PropTypes.bool.isRequired,
 	}
 
-	addToast(err,action){
-		console.log('adding toast', this.context, err);
-		this.context.base.addToast(err, action);
-	}
-
-	go(path, params){
-		this.context.router.push(path);
-	}
-
-	store(tx){
-		let conn = this.context.conn;
-		return tx(conn).then(() => {
-			conn.commit();
-		}).catch(err => {
-			this.addToast(err);
-		});
-	}
-
-}
-
-class App extends Component {
-
-	static propTypes = {
-		conn: PropTypes.object.isRequired,
-	}
-
-	state = {data: null};
+	state = {data:null}
 
 	componentDidMount(){
 		this.subscribe();
+	}
+
+	componentWillUnmount() {
+		this.unsubscribe();
 	}
 
 	componentWillReceiveProps(nextProps){
@@ -100,22 +95,84 @@ class App extends Component {
 		}
 	}
 
+	isMobile(){
+		return this.context.mobile;
+	}
+
+	isTablet(){
+		return this.context.tablet;
+	}
+
+	isDesktop(){
+		return this.context.desktop;
+	}
+
+	getQuery(){
+		return this.props.query;
+	}
+
+	unsubscribe(){
+		let conn = this.conn();
+		if( !conn ){
+			return;
+		}
+		conn.unsubscribe('main')
+			.catch(err => this.addToast(err))
+	}
+
 	subscribe(){
-		return this.props.conn.subscribe('main', this.getQuery()).then((query) => {
+		let query = this.getQuery();
+		if( !query ){
+			return;
+		}
+		let conn = this.conn();
+		if( !conn ){
+			return;
+		}
+		return conn.subscribe('main', query).then((query) => {
 			query.on('data', this._onQueryData);
 			query.on('error', this._onQueryError);
 		}).catch((err) => {
 			this.addToast(err);
 		})
+		console.log('subscribe', query);
 	}
 
 	_onQueryData = (data) => {
-		this.setState({data: data});
+		console.log(this, 'incoming data', data);
+		this.setState({data});
 	}
 
 	_onQueryError = (err) => {
 		this.addToast(err);
 	}
+
+	addToast(err,action){
+		this.context.addToast(err, action);
+	}
+
+	go(path, params){
+		this.context.router.push(path);
+	}
+
+	store(tx){
+		let conn = this.conn();
+		return tx(conn).then(() => {
+			conn.commit();
+		}).catch(err => {
+			this.addToast(err);
+		});
+	}
+
+	conn(){
+		return this.context.conn;
+	}
+
+}
+
+class App extends Component {
+
+	state = {data: null, preview:true}
 
 	getQuery(){
 		return `
@@ -161,53 +218,167 @@ class App extends Component {
 		this.props.onCloseSession();
 	}
 
-	sidebarItems(){
-		let router = this.context.router;
-		return [{
-			primaryText: 'Types',
-			onClick: () => this.go('/types'),
-		},{
-			primaryText: 'Content',
-			onClick: () => this.go('/content'),
-		},{
-			primaryText: 'Settings',
-			onClick: () => this.go('/settings'),
-		},{
-			primaryText: 'Audit Trail',
-			onClick: () => this.go('/settings'),
-		},{
-			primaryText: 'Switch Apps',
-			onClick: this._closeSession,
-		},{
-			primaryText: 'logout',
-			onClick: this._logout,
-		}]
+	sidebarIsOverlay(){
+		return this.isMobile() || this.isTablet();
 	}
 
-	toolbarItems(){
-		return (
-			<IconButton
-				tooltipLabel="Close Demo"
-				tooltipPosition="left"
-				className="md-navigation-drawer-btn fr"
-			>
-				close
-			</IconButton>
-		);
+	sidebarIsVisible(){
+		if( this.isDesktop() ){
+			return true;
+		}
+		return this.state.sidebar;
+	}
+
+	previewIsVisible(){
+		// force hide if screen too small for preview
+		if( this.isMobile() ){
+			return false;
+		}
+		return this.state.preview;
+	}
+
+	_toggleSidebar = () => {
+		let sidebar = !this.state.sidebar;
+		this.setState({sidebar});
+	}
+
+	_togglePreview = () => {
+		let preview = !this.state.preview;
+		this.setState({preview});
+	}
+
+	_captureClick = () => {
+		if( !this.sidebarIsOverlay() ){
+			return;
+		}
+		if( this.state.sidebar ){
+			this.setState({sidebar: false});
+		}
+	}
+
+	_clickTypes = () => {
+		this.go('/types')
+	}
+
+	typeFilterItems(){
+		let types = this.state.data.types;
+		return types.map(t => {
+			return <ListItem key={t.name} primaryText={t.name} />;
+		})
+	}
+
+	styles(){
+		let styles = {
+			container: {
+				display: 'flex',
+				position: 'absolute',
+				top: 0,
+				bottom: 0,
+				right: 0,
+				left: 0,
+				transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
+			},
+			sidebar: {
+				position: 'relative',
+				flex: '0 0 258px',
+				width: 258,
+				backgroundColor: '#fff',
+				zIndex: 3,
+				borderRight: '1px #ccc',
+				borderTopRightRadius: 2,
+				borderBottomRightRadius: 2,
+				transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
+				boxShadow: '0 0 38px rgba(0,0,0,0.30), 0 15px 12px rgba(0,0,0,0.22)',
+			},
+			main: {
+				position: 'relative',
+				backgroundColor: '#fff',
+				flex: '0 0 320px',
+				zIndex: 2,
+				borderRight: '1px #ccc',
+				borderTopRightRadius: 2,
+				borderBottomRightRadius: 2,
+				transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
+				boxShadow: '0 0 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
+			},
+			preview: {
+				position: 'relative',
+				backgroundColor: '#fff',
+				flex: '1',
+				zIndex: 1,
+				transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
+			},
+			clip: {
+				position: 'absolute',
+				top:0,
+				right:0,
+				bottom:0,
+				left:0,
+				overflow: 'hidden',
+			}
+		}
+		// modify styles for when sidebar is an overlay (mobile)
+		if( this.sidebarIsOverlay() ){
+			// mobile sidebar floats over main pane
+			styles.sidebar = Object.assign(styles.sidebar,{
+				position: 'absolute',
+				flex: 'none',
+				left: 0,
+				top: 0,
+				bottom: 0,
+			});
+		}
+		// modifiy styles for when sidebar is hidden
+		if( !this.sidebarIsVisible() ){
+			styles.sidebar.boxShadow = 'none';
+			if( this.sidebarIsOverlay() ){
+				styles.sidebar = Object.assign(styles.sidebar,{
+					left: -258,
+				});
+			} else {
+				styles.container = Object.assign(styles.container,{
+					left: -258,
+				});
+			}
+		}
+		// hide preview
+		if( !this.previewIsVisible() ){
+			styles.preview = Object.assign(styles.preview,{
+				display: 'none',
+			});
+			styles.main = Object.assign(styles.main,{
+				flex: 1,
+			});
+		}
+		return styles;
 	}
 
 	render(){
 		if( !this.state.data ){
-			return <div>NO DATA</div>;
+			return <CircularProgress />;
 		}
-		if( !this.props.children ){
-			return <div>NO CHILDREN?</div>;
-		}
-		let section = React.cloneElement(this.props.children, {
-			data: this.state.data,
-			online: this.state.online,
-		});
-		return section;
+		let section = this.props.children ? React.cloneElement(this.props.children,{
+			onToggleSidebar: this._toggleSidebar,
+			onTogglePreview: this._togglePreview,
+		}) : <div>NO CHILD</div>;
+		let styles = this.styles();
+		return <div style={styles.container}>
+			<div style={styles.sidebar}>
+				<div style={styles.clip}>
+					<List>
+						<ListItem primaryText="Types" onClick={this._clickTypes} />
+						<ListItem primaryText="Content" initiallyOpen={true} nestedItems={this.typeFilterItems()} />
+						<ListItem primaryText="Log" />
+					</List>
+				</div>
+			</div>
+			<div style={styles.main} onClickCapture={this._captureClick}>
+				{section}
+			</div>
+			<div style={styles.preview} onClickCapture={this._captureClick}>
+				<iframe width="100%" height="100%" style={{border:0,position:'absolute',top:0,right:0,bottom:0,left:0}} src="http://www.vacgen.com"></iframe>
+			</div>
+		</div>;
 	}
 }
 
@@ -267,19 +438,7 @@ class CreateFieldDialog extends Component {
 
 	render(){
 		let type = this.props.type;
-		return <Dialog modal isOpen
-			title="Create Field"
-			close={() => console.log('close')}
-			dialogStyle={{ maxWidth: 320 }}
-			actions={[{
-				onClick: () => {},
-				label: 'Cancel',
-			}, {
-				onClick: this._onSubmit,
-				primary: true,
-				label: 'OK',
-			}]}
-		>
+		return <div>
 			<div>
 				<SelectField
 					ref="type"
@@ -299,9 +458,7 @@ class CreateFieldDialog extends Component {
 					errorText={this.state.error}
 				/>
 			</div>
-			<div style={{width:500,height:50}}>
-			</div>
-		</Dialog>
+		</div>;
 	}
 }
 
@@ -406,37 +563,37 @@ const TypeItem = ({type}) => (
 
 class FieldExpansionPanel extends React.Component {
 
-	constructor(...args){
-		super(...args);
-		this.state = {field:{}};
-		for(let k in this.props.field){
-			this.state.field[k] = this.props.field[k];
-		}
+	static propTypes = {
+		field: PropTypes.object.isRequired,
+		onChange: PropTypes.func.isRequired,
 	}
 
-	set = (name, v) => {
-		let field = this.state.field;
-		field[name] = v;
-		this.setState({field});
+	state = {}
+
+	_onSave = () => {
+		let field = this.getField();
+		this.props.onChange(this.props.field, field);
 	}
 
-	onSave = () => {
-		let f = this.props.field;
-		for(let k in this.state.field){
-			f[k] = this.state.field[k];
-		}
-		this.store(conn => {
-			return conn.setType(this.props.type);
-		})
+	_setName = (name) => {
+		this.setState({name});
+	}
+
+	_setType = (type) => {
+		this.setState({type});
+	}
+
+	getField(){
+		return Object.assign({}, this.props.field, this.state)
 	}
 
 	render(){
-		let field = this.state.field;
+		let field = this.getField();
 		return (
 			<ExpansionPanel
-				label={this.props.field.name}
+				label={field.name}
 				secondaryLabel={[
-					this.props.field.type,
+					field.type,
 				]}
 				onSave={this._onSave}
 			>
@@ -446,7 +603,7 @@ class FieldExpansionPanel extends React.Component {
 							ref="name"
 							label="Name"
 							value={field.name}
-							onChange={this.set.bind(this,'name')}
+							onChange={this._setName}
 							fullWidth
 							helpText="The name of the field"
 						/>
@@ -456,7 +613,7 @@ class FieldExpansionPanel extends React.Component {
 							ref="type"
 							label="Type"
 							value={field.type}
-							onChange={this.set.bind(this,'type')}
+							onChange={this._setType}
 							menuItems={FIELD_TYPES}
 							itemLabel="type"
 							adjustMinWidth
@@ -470,37 +627,147 @@ class FieldExpansionPanel extends React.Component {
 	}
 }
 
+const Scroll = (props) => {
+	let style = {
+		position: 'absolute',
+		top:0,
+		left:0,
+		bottom:0,
+		right:0,
+		overflow: 'scroll',
+	};
+	return <div style={style}>
+		{props.children}
+	</div>;
+}
 
-const TypeEditPane = ({params,data,location}) => {
-	let type = data.types.filter(t => t.name == params.name)[0]
-	return (
-		<div style={{margin:40}}>
-			<ExpansionList>
-				{type.fields.map(f => <FieldExpansionPanel key={`${type.name}__${f.name}`} field={f} type={type} />)}
-			</ExpansionList>
-			<FloatingButton
-				primary
-				fixed
-				tooltipPosition="top"
-				tooltipLabel="Add Field"
-			>add</FloatingButton>
+
+class TypeEditPane extends Component {
+
+	static propTypes = {
+		onToggleSidebar: PropTypes.func,
+		onTogglePreview: PropTypes.func,
+	}
+
+	static title = 'Edit Type';
+
+	state = {type:{fields:[]}}
+
+	getTypeData(){
+		return this.state.data.type;
+	}
+
+	getType(){
+		let existing = this.state.data ? this.state.data.type || {} : {};
+		let modified = this.state.type;
+		return Object.assign({}, existing, modified);
+	}
+
+	_clickAdd = () => {
+		let t = this.state.type;
+		let type = Object.assign({}, t, {
+			fields: t.fields.concat({
+				name: `new field ${t.fields.length+1}`,
+				type: 'Text',
+			}),
+		});
+		this.setState({type});
+	}
+
+	_setField = (oldField, newField) => {
+		let t = this.state.type;
+		let type = Object.assign({}, t, {
+			fields: t.fields.slice().map(f => {
+				if( f.name == oldField.name ){
+					return newField;
+				}
+				return f;
+			})
+		});
+		console.log('setField', oldField, newField, type);
+		this.setState({type});
+	}
+
+	_setName = (name) => {
+		let type = Object.assign({}, this.state.type, {
+			name: name
+		})
+		this.setState({type});
+	}
+
+	render(){
+		let params = this.props.params;
+		let type = this.getType();
+		console.log('render type', type);
+		return (
+			<div style={{margin:40}}>
+				<Scroll>
+					<Toolbar
+						actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+						title="Edit Type"
+						actionsRight={<IconButton onClick={this.props.onTogglePreview}>menu</IconButton>}
+					/>
+					<List>
+						<Subheader primaryText="Type Settings" />
+					</List>
+					<div>
+						<TextField
+							ref="name"
+							label="Name"
+							block
+							value={type.name}
+							onChange={this._setName}
+							fullWidth
+							helpText="The name of the type"
+						/>
+					</div>
+					<Divider />
+					<List>
+						<Subheader primaryText="Fields" />
+					</List>
+					<ExpansionList>
+						{type.fields.map(f => <FieldExpansionPanel key={`${type.name}__${f.name}`} field={f} onChange={this._setField} />)}
+					</ExpansionList>
+				</Scroll>
+				<FloatingAddButton onClick={this._clickAdd} />
+			</div>
+		);
+	}
+}
+
+class TypesPane extends Component {
+
+	static title = 'Types'
+
+	getQuery(){
+		return `
+			types {
+				name
+				fields {
+					name
+					type
+				}
+			}
+		`
+	}
+
+	_clickAdd = () => {
+		this.go('/types/new');
+	}
+
+	render(){
+		if( !this.state.data ){
+			return <CircularProgress />;
+		}
+		let data = this.state.data;
+		return <div>
+			<List>
+				{data.types.map(t => <TypeItem key={t.name} type={t} />)}
+			</List>
+			<FloatingAddButton onClick={this._clickAdd} />
 		</div>
-	);
-};
-
-const TypesPane = ({params,data,location}) => (
-	<div>
-		<List>
-			{data.types.map(t => <TypeItem key={t.name} type={t} />)}
-		</List>
-		<FloatingButton
-			primary
-			fixed
-			tooltipPosition="top"
-			tooltipLabel="Add Type"
-		>add</FloatingButton>
-	</div>
-);
+	}
+}
 
 const TextControl = ({node,field,value,onChange}) => {
 	return (
@@ -736,12 +1003,7 @@ const ContentPane = ({params,data,location}) => (
 				{data.nodes.map(n => <ContentRow key={n.id} node={n} onClick={() => this.go(`/content/${n.id}`)} />)}
 			</TableBody>
 		</DataTable>
-		<FloatingButton
-			primary
-			fixed
-			tooltipPosition="top"
-			tooltipLabel="Add Type"
-		>add</FloatingButton>
+		<FloatingAddButton />
 	</div>
 );
 
@@ -752,6 +1014,7 @@ const ErrorPane = ({err}) => (
 const Home = () => (
 	<div>HOMEY</div>
 );
+Home.title = "Home";
 
 class SelectApp extends Component {
 
@@ -850,13 +1113,17 @@ class Connection extends Component {
 		sessionToken: PropTypes.string,
 	}
 
+	static childContextTypes = {
+		conn: PropTypes.object,
+	}
+
 	state = {user: null}
 
 	componentDidMount(){
-		this.refresh();
+		this.refreshApps();
 	}
 
-	refresh(){
+	refreshApps(){
 		let userToken = this.props.userToken;
 		let sessionToken = this.props.sessionToken;
 		return client.getUser({userToken}).then((u) => {
@@ -869,6 +1136,12 @@ class Connection extends Component {
 		}).catch(err => {
 			this.addToast(err);
 		})
+	}
+
+	getChildContext(){
+		return {
+			conn: this.state.conn
+		}
 	}
 
 	getApps(){
@@ -889,7 +1162,7 @@ class Connection extends Component {
 			userToken: this.props.userToken,
 			id,
 		}).then(() => {
-			return this.refresh()
+			return this.refreshApps()
 		}).then(() => {
 			return this._startSession({id})
 		}).catch(err => {
@@ -924,10 +1197,10 @@ class Connection extends Component {
 	render(){
 		let user = this.state.user;
 		if( !user ){
-			return <div>fetching apps</div>;
+			return <CircularProgress />;
 		}
 		if( this.state.conn ){
-			return <App conn={this.state.conn} onCloseSession={this._closeSession}>
+			return <App onCloseSession={this._closeSession}>
 				{this.props.children}
 			</App>;
 		}
@@ -1080,21 +1353,53 @@ class Session extends Component {
 	}
 }
 
-// the app "chrome" is the global stuff that every component has available
-// stuff like error message displays, dialogs etc
+// the app "chrome" sets up the context for the app
+// stuff like error message displays, dialogs, breakpoints etc
 class Chrome extends React.Component {
 
 	static childContextTypes = {
-		base: PropTypes.object,
+		addToast: PropTypes.func.isRequired,
+		mobile: PropTypes.bool.isRequired,
+		tablet: PropTypes.bool.isRequired,
+		desktop: PropTypes.bool.isRequired,
 	};
 
-	getChildContext(){
-		return {
-			base: this,
+	state = {toasts: []}
+
+	componentWillUnmount() {
+		if( this.unlisten ){
+			this.unlisten.forEach(fn => fn());
+			this.unlisten = null;
 		}
 	}
 
-	state = {toasts: []}
+	componentDidMount(){
+		const mq = {
+			mobile: window.matchMedia(`(min-width: 0px) and (max-width: 400px)`),
+			tablet: window.matchMedia(`(min-width: 400px) and (max-width: 800px)`),
+			desktop: window.matchMedia(`(min-width: 800px)`),
+		};
+		this.unlisten = Object.keys(mq).map(name => {
+			let fn = () => {
+				this.setState({ [name]: mq[name].matches });
+			};
+			fn();
+			mq[name].addListener(fn);
+			return () => {
+				mq[name].removeListener(fn);
+			}
+		})
+	}
+
+	getChildContext(){
+		return {
+			addToast: this._addToast,
+			mobile: !!this.state.mobile,
+			tablet: !!this.state.tablet,
+			desktop: !!this.state.desktop,
+		}
+	}
+
 
 	_dismissToast = () => {
 		const toasts = this.state.toasts.slice();
@@ -1102,7 +1407,7 @@ class Chrome extends React.Component {
 		this.setState({ toasts });
 	}
 
-	addToast(msg, action){
+	_addToast = (msg, action) => {
 		if( !msg ){
 			return;
 		}
@@ -1146,3 +1451,4 @@ const AppRouter = (props) => <Router history={browserHistory}>
 let localUserToken = localStorage.getItem('userToken');
 let localSessionToken = localStorage.getItem('sessionToken');
 render(<AppRouter userToken={localUserToken} sessionToken={localSessionToken} />, document.getElementById('app'))
+
