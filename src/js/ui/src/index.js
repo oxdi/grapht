@@ -7,10 +7,29 @@ import { Router, Route, Link, browserHistory, IndexRoute } from 'react-router'
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
-import UI from 'react-md/lib';
-import {ExpansionPanel, ExpansionList} from 'react-md/lib/ExpansionPanels';
-UI.ExpansionPanel = ExpansionPanel;
-UI.ExpansionList = ExpansionList;
+import {
+	IconButton,
+	FlatButton,
+	FloatingButton,
+	RaisedButton,
+	FontIcon,
+	Dialog,
+	Avatar,
+	Toolbar,
+	TextField,
+	SelectField,
+	Card, CardTitle, CardMedia,
+	LinearProgress,
+	TableRow,TableColumn,TableHeader,TableBody,DataTable,
+	Tabs,
+	Tab,
+	Snackbar,
+	List, ListItem,
+} from 'react-md';
+import {
+	ExpansionPanel,
+	ExpansionList
+} from 'react-md/lib/ExpansionPanels';
 
 WebFont.load({
 	google: {
@@ -167,13 +186,13 @@ class App extends Component {
 
 	toolbarItems(){
 		return (
-			<UI.IconButton
+			<IconButton
 				tooltipLabel="Close Demo"
 				tooltipPosition="left"
 				className="md-navigation-drawer-btn fr"
 			>
 				close
-			</UI.IconButton>
+			</IconButton>
 		);
 	}
 
@@ -188,27 +207,9 @@ class App extends Component {
 			data: this.state.data,
 			online: this.state.online,
 		});
-		let onlineMessage = this.state.online ? 'online' : 'offline';
-		return (
-			<UI.NavigationDrawer
-				drawerTitle={this.props.id}
-				toolbarTitle={onlineMessage}
-				tabletDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
-				desktopDrawerType={UI.NavigationDrawer.DrawerType.PERSISTENT_MINI}
-				navItems={this.sidebarItems()}
-				toolbarChildren={this.toolbarItems()}>
-				{section}
-			</UI.NavigationDrawer>
-		);
+		return section;
 	}
 }
-
-const CardList = ({children}) => (
-	<div className="md-card-list">
-		{children}
-	</div>
-)
-const Icon = ({name}) => <UI.FontIcon>{name}</UI.FontIcon>;
 
 const TypeIcon = ({type}) => {
 	if( type.name == 'User' ){
@@ -230,7 +231,7 @@ class CreateTypeDialog extends Component {
 	}
 
 	render(){
-		return <UI.Dialog modal isOpen
+		return <Dialog modal isOpen
 			title="Create Type"
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
@@ -243,8 +244,8 @@ class CreateTypeDialog extends Component {
 				label: 'OK',
 			}]}
 		>
-			<UI.TextField ref="name" label="Name" errorText={this.state.error} />
-		</UI.Dialog>
+			<TextField ref="name" label="Name" errorText={this.state.error} />
+		</Dialog>
 	}
 }
 
@@ -266,7 +267,7 @@ class CreateFieldDialog extends Component {
 
 	render(){
 		let type = this.props.type;
-		return <UI.Dialog modal isOpen
+		return <Dialog modal isOpen
 			title="Create Field"
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
@@ -280,7 +281,7 @@ class CreateFieldDialog extends Component {
 			}]}
 		>
 			<div>
-				<UI.SelectField
+				<SelectField
 					ref="type"
 					label="Type"
 					menuItems={FIELD_TYPES}
@@ -291,7 +292,7 @@ class CreateFieldDialog extends Component {
 				/>
 			</div>
 			<div>
-				<UI.TextField
+				<TextField
 					ref="name"
 					label="Name"
 					fullWidth
@@ -300,7 +301,7 @@ class CreateFieldDialog extends Component {
 			</div>
 			<div style={{width:500,height:50}}>
 			</div>
-		</UI.Dialog>
+		</Dialog>
 	}
 }
 
@@ -352,7 +353,7 @@ class CreateContentDialog extends React.Component {
 
 	render(){
 		let types = this.props.types;
-		return <UI.Dialog modal isOpen
+		return <Dialog modal isOpen
 			title="Create Content"
 			close={() => console.log('close')}
 			dialogStyle={{ maxWidth: 320 }}
@@ -366,7 +367,7 @@ class CreateContentDialog extends React.Component {
 			}]}
 		>
 			<div>
-				<UI.SelectField
+				<SelectField
 					ref="type"
 					label="Type"
 					menuItems={types.map(t => t.name)}
@@ -378,7 +379,7 @@ class CreateContentDialog extends React.Component {
 				/>
 			</div>
 			<div>
-				<UI.TextField
+				<TextField
 					ref="id"
 					label="ID"
 					value={this.state.node.id}
@@ -389,14 +390,14 @@ class CreateContentDialog extends React.Component {
 			</div>
 			<div style={{width:500,height:50}}>
 			</div>
-		</UI.Dialog>
+		</Dialog>
 	}
 }
 
 const TypeItem = ({type}) => (
-	<UI.ListItem
-		leftAvatar={<UI.Avatar icon={<TypeIcon type={type} />} />}
-		rightIcon={<UI.FontIcon>info</UI.FontIcon>}
+	<ListItem
+		leftAvatar={<Avatar icon={<TypeIcon type={type} />} />}
+		rightIcon={<FontIcon>info</FontIcon>}
 		primaryText={type.name}
 		secondaryText="Custom Type"
 		onClick={() => this.go(`/types/${type.name}`)}
@@ -432,7 +433,7 @@ class FieldExpansionPanel extends React.Component {
 	render(){
 		let field = this.state.field;
 		return (
-			<UI.ExpansionPanel
+			<ExpansionPanel
 				label={this.props.field.name}
 				secondaryLabel={[
 					this.props.field.type,
@@ -441,7 +442,7 @@ class FieldExpansionPanel extends React.Component {
 			>
 				<form>
 					<div>
-						<UI.TextField
+						<TextField
 							ref="name"
 							label="Name"
 							value={field.name}
@@ -451,7 +452,7 @@ class FieldExpansionPanel extends React.Component {
 						/>
 					</div>
 					<div>
-						<UI.SelectField
+						<SelectField
 							ref="type"
 							label="Type"
 							value={field.type}
@@ -464,7 +465,7 @@ class FieldExpansionPanel extends React.Component {
 						/>
 					</div>
 				</form>
-			</UI.ExpansionPanel>
+			</ExpansionPanel>
 		);
 	}
 }
@@ -474,36 +475,36 @@ const TypeEditPane = ({params,data,location}) => {
 	let type = data.types.filter(t => t.name == params.name)[0]
 	return (
 		<div style={{margin:40}}>
-			<UI.ExpansionList>
+			<ExpansionList>
 				{type.fields.map(f => <FieldExpansionPanel key={`${type.name}__${f.name}`} field={f} type={type} />)}
-			</UI.ExpansionList>
-			<UI.FloatingButton
+			</ExpansionList>
+			<FloatingButton
 				primary
 				fixed
 				tooltipPosition="top"
 				tooltipLabel="Add Field"
-			>add</UI.FloatingButton>
+			>add</FloatingButton>
 		</div>
 	);
 };
 
 const TypesPane = ({params,data,location}) => (
 	<div>
-		<UI.List>
+		<List>
 			{data.types.map(t => <TypeItem key={t.name} type={t} />)}
-		</UI.List>
-		<UI.FloatingButton
+		</List>
+		<FloatingButton
 			primary
 			fixed
 			tooltipPosition="top"
 			tooltipLabel="Add Type"
-		>add</UI.FloatingButton>
+		>add</FloatingButton>
 	</div>
 );
 
-const TextField = ({node,field,value,onChange}) => {
+const TextControl = ({node,field,value,onChange}) => {
 	return (
-		<UI.TextField
+		<TextField
 			label={field.name}
 			value={value}
 			onChange={onChange}
@@ -513,12 +514,12 @@ const TextField = ({node,field,value,onChange}) => {
 	)
 }
 
-const BooleanField = ({node,field,value,onChange}) => {
+const BooleanControl = ({node,field,value,onChange}) => {
 	const on = value === true ||
 		value === 1 ||
 		(/^(true|yes|y|t|on)$/i).test((value || '').toString());
 	return (
-		<UI.Switch
+		<Switch
 			label={field.name}
 			toggled={on}
 			onChange={onChange} />
@@ -527,18 +528,18 @@ const BooleanField = ({node,field,value,onChange}) => {
 
 class UploadedImageCard extends PureComponent {
 	render() {
-		const title = <UI.CardTitle
+		const title = <CardTitle
 			key="title"
 			title="Image Filename here"
 			subtitle={`Other image info here`}
 		/>
 
-		return <UI.Card>
-			<UI.CardMedia overlay={title}>
-			<UI.IconButton data-name={name} className="close-btn">close</UI.IconButton>
+		return <Card>
+			<CardMedia overlay={title}>
+			<IconButton data-name={name} className="close-btn">close</IconButton>
 				<img src={this.props.url} />
-			</UI.CardMedia>
-		</UI.Card>;
+			</CardMedia>
+		</Card>;
 	}
 }
 
@@ -592,8 +593,8 @@ class ImageField extends PureComponent {
 		let stats;
 		if (typeof progress === 'number') {
 			stats = [
-				<UI.LinearProgress key="progress" value={progress} />,
-				<UI.RaisedButton key="abort" label="Abort Upload" onClick={this._abortUpload} />,
+				<LinearProgress key="progress" value={progress} />,
+				<RaisedButton key="abort" label="Abort Upload" onClick={this._abortUpload} />,
 			];
 		}
 
@@ -609,7 +610,7 @@ class ImageField extends PureComponent {
 			>
 				{img}
 			</CSSTransitionGroup>
-			<UI.FileUpload
+			<FileUpload
 				multiple={false}
 				secondary
 				ref="upload"
@@ -622,14 +623,14 @@ class ImageField extends PureComponent {
 	}
 }
 
-class Field extends React.Component {
+class Control extends React.Component {
 	render(){
 		switch( this.props.field.type ){
-		case 'Text':      return <TextField {...this.props} />;
-		case 'Int':       return <TextField {...this.props} type="number" />;
-		case 'Float':     return <TextField {...this.props} type="number" />;
-		case 'Boolean':   return <BooleanField {...this.props} />;
-		case 'Image':     return <ImageField {...this.props} />;
+		case 'Text':      return <TextControl {...this.props} />;
+		case 'Int':       return <TextControl {...this.props} type="number" />;
+		case 'Float':     return <TextControl {...this.props} type="number" />;
+		case 'Boolean':   return <BooleanControl {...this.props} />;
+		case 'Image':     return <ImageControl {...this.props} />;
 		// TODO: HasOne, Collections
 		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
 		}
@@ -685,11 +686,11 @@ class ContentEditPane extends React.Component {
 	fieldItems(){
 		let node = this.node;
 		return node.type.fields.map(f => {
-			return <UI.Card key={`${node.id}__${f.name}`}>
+			return <Card key={`${node.id}__${f.name}`}>
 				<div style={{margin:20}}>
-					<Field ref={f.name} field={f} node={node} value={this.state.values[f.name]} onChange={this.set.bind(this,f)} />
+					<Control ref={f.name} field={f} node={node} value={this.state.values[f.name]} onChange={this.set.bind(this,f)} />
 				</div>
-			</UI.Card>
+			</Card>
 		})
 	}
 
@@ -698,11 +699,11 @@ class ContentEditPane extends React.Component {
 			<div style={{margin:40}}>
 				<div className="md-card-list">
 					{this.fieldItems()}
-					<UI.Card>
+					<Card>
 						<div style={{margin:20}}>
-							<UI.FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this._onSave} />
+							<FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this._onSave} />
 						</div>
-					</UI.Card>
+					</Card>
 				</div>
 			</div>
 		);
@@ -714,33 +715,33 @@ const ContentRow = ({node,onClick}) => {
 		vs[attr.name] = attr.value;
 		return vs;
 	},{})
-	return <UI.TableRow onClick={onClick}>
-		<UI.TableColumn>{node.id}</UI.TableColumn>
-		<UI.TableColumn>{node.type.name}</UI.TableColumn>
-		<UI.TableColumn>{values.name || values.title || 'unnamed'}</UI.TableColumn>
-	</UI.TableRow>;
+	return <TableRow onClick={onClick}>
+		<TableColumn>{node.id}</TableColumn>
+		<TableColumn>{node.type.name}</TableColumn>
+		<TableColumn>{values.name || values.title || 'unnamed'}</TableColumn>
+	</TableRow>;
 }
 
 const ContentPane = ({params,data,location}) => (
 	<div>
-		<UI.DataTable>
-			<UI.TableHeader>
-				<UI.TableRow>
-					<UI.TableColumn>ID</UI.TableColumn>
-					<UI.TableColumn>Type</UI.TableColumn>
-					<UI.TableColumn numeric>Name</UI.TableColumn>
-				</UI.TableRow>
-			</UI.TableHeader>
-			<UI.TableBody>
+		<DataTable>
+			<TableHeader>
+				<TableRow>
+					<TableColumn>ID</TableColumn>
+					<TableColumn>Type</TableColumn>
+					<TableColumn numeric>Name</TableColumn>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
 				{data.nodes.map(n => <ContentRow key={n.id} node={n} onClick={() => this.go(`/content/${n.id}`)} />)}
-			</UI.TableBody>
-		</UI.DataTable>
-		<UI.FloatingButton
+			</TableBody>
+		</DataTable>
+		<FloatingButton
 			primary
 			fixed
 			tooltipPosition="top"
 			tooltipLabel="Add Type"
-		>add</UI.FloatingButton>
+		>add</FloatingButton>
 	</div>
 );
 
@@ -786,10 +787,10 @@ class SelectApp extends Component {
 	renderActions(){
 		let cancel;
 		if( this.props.onCancel ){
-			cancel = <UI.FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>;
+			cancel = <FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>;
 		}
 		return <div style={{marginLeft:'auto'}}>
-			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>
+			<FlatButton type="submit" className="md-toolbar-item" primary label="Create" onClick={this._submit}/>
 			{cancel}
 		</div>;
 	}
@@ -800,10 +801,10 @@ class SelectApp extends Component {
 				Create a new application.
 			</p>
 			<div>
-				<UI.TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
+				<TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
 			</div>
 			<div>
-				<UI.Toolbar primary={false} actionsRight={this.renderActions()} />
+				<Toolbar primary={false} actionsRight={this.renderActions()} />
 			</div>
 		</div>;
 	}
@@ -815,9 +816,9 @@ class SelectApp extends Component {
 				<p>You do not currently have any sites. Click on the 'new' tab</p>
 			</div>;
 		}
-		return <UI.List>
-			{apps.map(id => <UI.ListItem key={id} primaryText={id} onClick={this._select.bind(this,id)} />)}
-		</UI.List>;
+		return <List>
+			{apps.map(id => <ListItem key={id} primaryText={id} onClick={this._select.bind(this,id)} />)}
+		</List>;
 	}
 
 	renderTab(){
@@ -830,13 +831,13 @@ class SelectApp extends Component {
 
 	render(){
 		return <form className="md-card-list" onSubmit={this._submit}>
-			<UI.Dialog isOpen close={() => {}} modal>
-				<UI.Tabs centered fixedWidth primary>
-					<UI.Tab label="Open Site" icon={<UI.FontIcon>collections</UI.FontIcon>} onChange={this._setTab} />
-					<UI.Tab label="Create Site" icon={<UI.FontIcon>edit</UI.FontIcon>} onChange={this._setTab} />
-				</UI.Tabs>
+			<Dialog isOpen close={() => {}} modal>
+				<Tabs centered fixedWidth primary>
+					<Tab label="Open Site" icon={<FontIcon>collections</FontIcon>} onChange={this._setTab} />
+					<Tab label="Create Site" icon={<FontIcon>edit</FontIcon>} onChange={this._setTab} />
+				</Tabs>
 				{this.renderTab()}
-			</UI.Dialog>
+			</Dialog>
 		</form>;
 	}
 
@@ -1014,40 +1015,40 @@ class Session extends Component {
 
 	renderLoginForm(){
 		let actions = <div style={{marginLeft:'auto'}}>
-			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Login" onClick={this._login}/>
+			<FlatButton type="submit" className="md-toolbar-item" primary label="Login" onClick={this._login}/>
 		</div>;
 		return <form onSubmit={this._login}>
 			<div>
-				<UI.TextField label="Username" fullWidth value={this.state.username} onChange={this._onChangeUsername} />
+				<TextField label="Username" fullWidth value={this.state.username} onChange={this._onChangeUsername} />
 			</div>
 			<div>
-				<UI.TextField label="Password" rightIcon={<i></i>} fullWidth errorText={this.state.loginError} type="password" value={this.state.password} onChange={this._onChangePassword} />
+				<TextField label="Password" rightIcon={<i></i>} fullWidth errorText={this.state.loginError} type="password" value={this.state.password} onChange={this._onChangePassword} />
 			</div>
 			<div>
-				<UI.Toolbar primary={false} actionsRight={actions} />
+				<Toolbar primary={false} actionsRight={actions} />
 			</div>
 		</form>;
 	}
 
 	renderRegisterForm(){
 		let actions = <div style={{marginLeft:'auto'}}>
-			<UI.FlatButton type="submit" className="md-toolbar-item" primary label="Register Now" onClick={this._register}/>
+			<FlatButton type="submit" className="md-toolbar-item" primary label="Register Now" onClick={this._register}/>
 		</div>;
 		return <div>
 			<div>
-				<UI.TextField fullWidth label="Username" value={this.state.username} onChange={this._onChangeUsername} />
+				<TextField fullWidth label="Username" value={this.state.username} onChange={this._onChangeUsername} />
 			</div>
 			<div>
-				<UI.TextField fullWidth label="Password" rightIcon={<i></i>} type="password" value={this.state.password} onChange={this._onChangePassword} />
+				<TextField fullWidth label="Password" rightIcon={<i></i>} type="password" value={this.state.password} onChange={this._onChangePassword} />
 			</div>
 			<div>
-				<UI.TextField fullWidth label="Email" value={this.state.email} onChange={this._onChangeEmail} />
+				<TextField fullWidth label="Email" value={this.state.email} onChange={this._onChangeEmail} />
 			</div>
 			<div>
-				<UI.TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
+				<TextField fullWidth label="Site Name" value={this.state.appID} onChange={this._onChangeAppID} />
 			</div>
 			<div>
-				<UI.Toolbar primary={false} actionsRight={actions} />
+				<Toolbar primary={false} actionsRight={actions} />
 			</div>
 		</div>;
 	}
@@ -1060,13 +1061,13 @@ class Session extends Component {
 
 	renderLoginDialog(){
 		return <div className="md-card-list">
-			<UI.Dialog isOpen close={() => {}} modal>
-				<UI.Tabs centered fixedWidth primary>
-					<UI.Tab label="Login" icon={<UI.FontIcon>face</UI.FontIcon>} onChange={this._setTab} />
-					<UI.Tab label="Register" icon={<UI.FontIcon>edit</UI.FontIcon>} onChange={this._setTab} />
-				</UI.Tabs>
+			<Dialog isOpen close={() => {}} modal>
+				<Tabs centered fixedWidth primary>
+					<Tab label="Login" icon={<FontIcon>face</FontIcon>} onChange={this._setTab} />
+					<Tab label="Register" icon={<FontIcon>edit</FontIcon>} onChange={this._setTab} />
+				</Tabs>
 				{this.renderForm()}
-			</UI.Dialog>
+			</Dialog>
 		</div>;
 	}
 
@@ -1123,7 +1124,7 @@ class Chrome extends React.Component {
 			<Session userToken={this.props.route.userToken} sessionToken={this.props.route.sessionToken}>
 				{this.props.children}
 			</Session>
-			<UI.Snackbar
+			<Snackbar
 				toasts={this.state.toasts}
 				dismiss={this._dismissToast}
 				autohide={true}
