@@ -214,6 +214,20 @@ test("create a Post type", function(t){
 	})
 });
 
+test("fetch single type by name", function(t){
+	return admin.query(`
+		type(name:"Post") {
+			name
+		}
+	`).then(function(res){
+		t.same(res, {
+			type: {
+				name: "Post"
+			}
+		});
+	})
+})
+
 test("create a Tag type", function(t){
 	return admin.setType({
 		name:"Tag",

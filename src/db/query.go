@@ -826,6 +826,24 @@ func (cxt *GraphqlContext) NodeField(t *graph.Type) *graphql.Field {
 	}
 }
 
+func (cxt *GraphqlContext) GetType() *graphql.Field {
+	return &graphql.Field{
+		Args: graphql.FieldConfigArgument{
+			"name": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
+		},
+		Description: "fetch single type by name",
+		Type:        cxt.TypeObject(),
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			name, ok := p.Args["name"].(string)
+			if !ok || name == "" {
+				return nil, fmt.Errorf("invalid name arg")
+			}
+			return cxt.conn.g.Type(name), nil
+		},
+	}
+}
 func (cxt *GraphqlContext) GetTypes() *graphql.Field {
 	return &graphql.Field{
 		Description: "list all type definition",
@@ -1098,6 +1116,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	// }
 	cxt.AddQuery("node", cxt.NodeField(nil))
 	cxt.AddQuery("nodes", cxt.NodeListField(nil))
+	cxt.AddQuery("type", cxt.GetType())
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddMutation("setType", cxt.DefineTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetMutation())
