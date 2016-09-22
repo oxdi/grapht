@@ -156,25 +156,25 @@ test("create an Author type", function(t){
 			{name:"age",type:"Int"},
 			{name:"height", type:"Float"},
 			{name:"admin", type:"Boolean"},
-			{name:"posts",type:"HasMany",edge:"author", toType:"Post"}
+			{name:"posts",type:"HasMany",edgeName:"author", edgeToType:"Post"}
 		]
 	}, `
 		name
 		fields {
 			name
 			type
-			toType
+			edgeToType
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
 			name: "Author",
 			fields: [
-				{name: "name", type:"Text", toType:null},
-				{name: "age", type:"Int", toType:null},
-				{name: "height", type:"Float", toType:null},
-				{name: "admin", type:"Boolean", toType:null},
-				{name: "posts", type:"HasMany", toType:"Post"}
+				{name: "name", type:"Text", edgeToType:null},
+				{name: "age", type:"Int", edgeToType:null},
+				{name: "height", type:"Float", edgeToType:null},
+				{name: "admin", type:"Boolean", edgeToType:null},
+				{name: "posts", type:"HasMany", edgeToType:"Post"}
 			]
 		})
 	})
@@ -187,27 +187,27 @@ test("create a Post type", function(t){
 			{name:"title",type:"Text"},
 			{name:"image",type:"Image"},
 			{name:"body",type:"Text"},
-			{name:"author", type:"HasOne", edge:"author", toType:"Author"},
-			{name:"tags", type:"HasMany", edge:"tagged", toType:"Tag"}
+			{name:"author", type:"HasOne", edgeName:"author", edgeToType:"Author"},
+			{name:"tags", type:"HasMany", edgeName:"tagged", edgeToType:"Tag"}
 		]
 	},`
 		name
 		fields {
 			name
 			type
-			edge
-			toType
+			edgeName
+			edgeToType
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
 			name: "Post",
 			fields: [
-				{name: "title", type:"Text", edge:null, toType:null},
-				{name: "image", type:"Image", edge:null, toType:null},
-				{name: "body", type:"Text", edge:null, toType:null},
-				{name: "author", type:"HasOne", edge:"author",toType:"Author"},
-				{name: "tags", type:"HasMany", edge:"tagged",toType:"Tag"},
+				{name: "title", type:"Text", edgeName:null, edgeToType:null},
+				{name: "image", type:"Image", edgeName:null, edgeToType:null},
+				{name: "body", type:"Text", edgeName:null, edgeToType:null},
+				{name: "author", type:"HasOne", edgeName:"author",edgeToType:"Author"},
+				{name: "tags", type:"HasMany", edgeName:"tagged",edgeToType:"Tag"},
 
 			]
 		})
@@ -266,7 +266,7 @@ test("create a Tag type", function(t){
 		name:"Tag",
 		fields:[
 			{name:"name",type:"Text"},
-			{name:"posts", type:"HasMany",edge:"tagged"}
+			{name:"posts", type:"HasMany",edgeName:"tagged"}
 		]
 	})
 	.then(function(res){
@@ -931,3 +931,46 @@ test("subscription should update on guest.commit", function(t){
 	})
 
 })
+
+
+// end of blog tests --- it's choas from here down :)
+
+test("textLineLimit", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"content",type:"Text",textLineLimit:3},
+		]
+	},`
+		fields {
+			textLineLimit
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{textLineLimit: 3},
+			]
+		})
+	})
+});
+
+test("textCharLimit", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"content",type:"Text",textCharLimit:3},
+		]
+	},`
+		fields {
+			textCharLimit
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{textCharLimit: 3},
+			]
+		})
+	})
+});

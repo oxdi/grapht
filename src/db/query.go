@@ -254,45 +254,85 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 	cxt.fieldDefinitionObject = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Field",
 		Fields: graphql.Fields{
-			"type": &graphql.Field{
-				Type:        graphql.NewNonNull(cxt.ValueTypeEnum()),
-				Description: "field type",
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					if fd, ok := p.Source.(*graph.Field); ok {
-						return string(fd.Type), nil
-					}
-					return nil, nil
-				},
-			},
-			"toType": &graphql.Field{
-				Type:        graphql.String,
-				Description: "optional type of target nodes",
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					if fd, ok := p.Source.(*graph.Field); ok {
-						if fd.ToType != "" {
-							return fd.ToType, nil
-						}
-					}
-					return nil, nil
-				},
-			},
-			"edge": &graphql.Field{
-				Type:        graphql.String,
-				Description: "optional name of edge to follow",
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					if fd, ok := p.Source.(*graph.Field); ok {
-						return fd.Edge, nil
-					}
-					return nil, nil
-				},
-			},
 			"name": &graphql.Field{
 				Type:        graphql.NewNonNull(graphql.String),
 				Description: "field name",
 			},
+			"type": &graphql.Field{
+				Type:        graphql.NewNonNull(cxt.ValueTypeEnum()),
+				Description: "field type",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					return string(fd.Type), nil
+				},
+			},
 			"required": &graphql.Field{
 				Type:        graphql.NewNonNull(graphql.Boolean),
 				Description: "is field required",
+			},
+			"edgeToType": &graphql.Field{
+				Type:        graphql.String,
+				Description: "optional type of target nodes",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					if fd.EdgeToType == "" {
+						return nil, nil
+					}
+					return fd.EdgeToType, nil
+				},
+			},
+			"edgeName": &graphql.Field{
+				Type:        graphql.String,
+				Description: "optional name of edge to follow",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					if fd.EdgeName == "" {
+						return nil, nil
+					}
+					return fd.EdgeName, nil
+				},
+			},
+			"textMarkup": &graphql.Field{
+				Type:        graphql.String,
+				Description: "is this field marked up with special formating",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					return fd.TextMarkup, nil
+				},
+			},
+			"textLineLimit": &graphql.Field{
+				Type:        graphql.Int,
+				Description: "limit number of lines 0=nolimit",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					return fd.TextLineLimit, nil
+				},
+			},
+			"textCharLimit": &graphql.Field{
+				Type:        graphql.Int,
+				Description: "limit number of characters 0=nolimit",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					return fd.TextCharLimit, nil
+				},
 			},
 		},
 	})
@@ -560,16 +600,16 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 	case graph.Image:
 		return cxt.ImageObject()
 	case graph.HasOne:
-		if fd.ToType != "" {
-			t := cxt.conn.g.Type(fd.ToType)
+		if fd.EdgeToType != "" {
+			t := cxt.conn.g.Type(fd.EdgeToType)
 			if t != nil {
 				return cxt.NodeType(t)
 			}
 		}
 		return cxt.NodeInterface()
 	case graph.HasMany:
-		if fd.ToType != "" {
-			t := cxt.conn.g.Type(fd.ToType)
+		if fd.EdgeToType != "" {
+			t := cxt.conn.g.Type(fd.EdgeToType)
 			if t != nil {
 				return graphql.NewList(cxt.NodeType(t))
 			}
@@ -653,8 +693,8 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 			switch f.Type {
 			case graph.HasOne:
 				var edgeNames []string
-				if f.Edge != "" {
-					edgeNames = append(edgeNames, f.Edge)
+				if f.EdgeName != "" {
+					edgeNames = append(edgeNames, f.EdgeName)
 				}
 				node := n.Out(edgeNames...).Nodes().First()
 				if node == nil {
@@ -663,8 +703,8 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 				return node, nil
 			case graph.HasMany:
 				var edgeNames []string
-				if f.Edge != "" {
-					edgeNames = append(edgeNames, f.Edge)
+				if f.EdgeName != "" {
+					edgeNames = append(edgeNames, f.EdgeName)
 				}
 				return n.In(edgeNames...).Nodes(), nil
 			default:
@@ -736,11 +776,20 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"type": &graphql.InputObjectFieldConfig{
 							Type: graphql.NewNonNull(graphql.String),
 						},
-						"edge": &graphql.InputObjectFieldConfig{
+						"edgeName": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
-						"toType": &graphql.InputObjectFieldConfig{
+						"edgeToType": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
+						},
+						"textMarkup": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+						"textLineLimit": &graphql.InputObjectFieldConfig{
+							Type: graphql.Int,
+						},
+						"textCharLimit": &graphql.InputObjectFieldConfig{
+							Type: graphql.Int,
 						},
 					},
 				})),
@@ -749,12 +798,7 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			args := struct {
 				Name   string
-				Fields []struct {
-					Name   string
-					Type   string
-					Edge   string
-					ToType string
-				}
+				Fields []*graph.Field
 			}{}
 			if err := fill(&args, p.Args); err != nil {
 				return nil, err
@@ -764,12 +808,7 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 				if !validIdent.MatchString(fa.Name) {
 					return nil, fmt.Errorf("'%s' is not a valid name", fa.Name)
 				}
-				t.Fields = append(t.Fields, &graph.Field{
-					Name:   fa.Name,
-					Type:   fa.Type,
-					Edge:   fa.Edge,
-					ToType: fa.ToType,
-				})
+				t.Fields = append(t.Fields, fa)
 			}
 			g := cxt.conn.g
 			g = g.DefineType(*t)

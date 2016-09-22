@@ -70,7 +70,7 @@ export default class Connection {
 		} else if( this.subscriptions[msg.subscription] ){
 			this.handleSubscriptionMessage(msg);
 		} else {
-			throw new Error('unhandled msg', evt.data);
+			throw new Error('unhandled msg: '+evt.data);
 		}
 	}
 

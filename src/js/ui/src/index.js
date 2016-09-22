@@ -17,6 +17,7 @@ import {
 	Avatar,
 	Toolbar,
 	TextField,
+	Switch,
 	Card, CardTitle, CardMedia,
 	LinearProgress,
 	TableRow,TableColumn,TableHeader,TableBody,DataTable,
@@ -67,31 +68,37 @@ const FloatingAddButton = (props) => <FloatingButton
 	{...props}
 >add</FloatingButton>;
 
+window.conns = 0;
 class Component extends React.Component {
 
 	static contextTypes = {
-		addToast: PropTypes.func.isRequired,
-		router: PropTypes.object,
-		conn: PropTypes.object,
+		userToken: PropTypes.string.isRequired,
+		appID: PropTypes.string.isRequired,
+		onError: PropTypes.func.isRequired,
+		router: PropTypes.object.isRequired,
 		mobile: PropTypes.bool.isRequired,
 		tablet: PropTypes.bool.isRequired,
 		desktop: PropTypes.bool.isRequired,
 	}
 
-	state = {data:null}
+	state = {}
 
 	componentDidMount(){
 		this.subscribe();
 	}
 
 	componentWillUnmount() {
-		this.unsubscribe();
+		this.conn().then(conn => {
+			conn.unsubscribe('main');
+			console.log(this.constructor.name, 'unsubscribed and disconnected')
+			window.conns--;
+			return conn.close();
+		})
 	}
 
 	componentWillReceiveProps(nextProps){
-		if( nextProps.conn != this.props.conn ){
-			this.subscribe();
-		}
+		this.setState({});
+		this.unsubscribe().then(() => this.subscribe())
 	}
 
 	isMobile(){
@@ -107,47 +114,26 @@ class Component extends React.Component {
 	}
 
 	getQuery(){
-		return this.props.query;
+		return;
 	}
 
 	unsubscribe(){
-		let conn = this.conn();
-		if( !conn ){
-			return;
+		if( !this.state.query ){
+			return Promise.resolve();
 		}
-		conn.unsubscribe('main')
-			.catch(err => this.addToast(err))
+		return this.conn()
+			.then(this._unsubscribe)
+			.catch(this._onError)
 	}
 
 	subscribe(){
-		let query = this.getQuery();
-		if( !query ){
-			return;
+		let q = this.getQuery();
+		if( !q ){
+			return Promise.resolve();
 		}
-		let conn = this.conn();
-		if( !conn ){
-			return;
-		}
-		return conn.subscribe('main', query).then((query) => {
-			query.on('data', this._onQueryData);
-			query.on('error', this._onQueryError);
-		}).catch((err) => {
-			this.addToast(err);
-		})
-		console.log('subscribe', query);
-	}
-
-	_onQueryData = (data) => {
-		console.log(this, 'incoming data', data);
-		this.setState({data});
-	}
-
-	_onQueryError = (err) => {
-		this.addToast(err);
-	}
-
-	addToast(err,action){
-		this.context.addToast(err, action);
+		return this.conn()
+			.then(this._subscribe)
+			.catch(this._onError)
 	}
 
 	go(path, params){
@@ -155,69 +141,78 @@ class Component extends React.Component {
 	}
 
 	store(tx){
-		let conn = this.conn();
-		let res = tx(conn).then(() => {
-			return conn.commit();
-		})
-		res.catch(err => {
-			this.addToast(err);
-		});
-		return res;
+		return this.conn()
+			.then(conn => tx(conn).then(() => conn.commit()))
+			.catch(this._onError)
 	}
 
 	conn(){
-		return this.context.conn;
+		if( this._conn ){
+			return this._conn.catch(this._toast);
+		}
+		this._conn = client.connect({
+			userToken: this.context.userToken,
+			appID: this.context.appID,
+		}).then((conn) => {
+			console.log(this.constructor.name, 'connected');
+			window.conns++;
+			return conn;
+		}).catch(this._onError)
+		return this._conn;
 	}
+
+	_unsubscribe = (conn) => {
+		return conn.unsubscribe('main')
+			.then(this._onUnsubscribe)
+			.catch(this._onError)
+	}
+
+	_onUnsubscribe = () => {
+		console.log(this.constructor.name, 'unsubscribed');
+		this.setState({query:null,data:null});
+	}
+
+
+	_subscribe = (conn) => {
+		let q = this.getQuery();
+		return conn.subscribe('main', q)
+			.then(this._onSubscribe)
+			.catch(this._onError)
+	}
+
+	_onSubscribe = (query) => {
+		query.on('data', this._onQueryData);
+		query.on('error', this._onQueryError);
+		this.setState({query})
+		console.log(this.constructor.name, 'subscribed');
+
+	}
+
+	_onQueryData = (data) => {
+		console.log(this.constructor.name, 'incoming data', data);
+		this.setState({data});
+	}
+
+	_onQueryError = (err) => {
+		this._onError(err)
+	}
+
+	_onError = (err,action) => {
+		this.context.onError(err, action);
+	}
+
 
 }
 
-class App extends Component {
+class AppLayout extends Component {
 
-	state = {data: null, preview:true}
-
-	getQuery(){
-		return `
-			types {
-				name
-				fields {
-					name
-					type
-				}
-			}
-			nodes {
-				type {
-					name
-					fields {
-						name
-						type
-					}
-				}
-				id
-				attrs {
-					name
-					value
-				}
-				edges {
-					name
-					from {
-						id
-					}
-					to {
-						id
-					}
-				}
-			}
-		`
+	static propTypes = {
+		sidebar: PropTypes.node.isRequired,
+		children: PropTypes.node.isRequired,
+		preview: PropTypes.node,
 	}
 
-	_logout = () => {
-		localStorage.clear();
-		this._closeSession();
-	}
-
-	_closeSession = () => {
-		this.props.onCloseSession();
-	}
+	state = {preview:true}
 
 	sidebarIsOverlay(){
 		return this.isMobile() || this.isTablet();
@@ -252,14 +247,6 @@ class App extends Component {
 		if( this.state.sidebar ){
 			this.setState({sidebar: false});
 		}
-	}
-
-	_clickTypes = () => {
-		this.go('/types')
-	}
-
-	_clickContent = (type) => {
-		this.go(`/types/${type.name}/nodes`)
 	}
 
 	styles(){
@@ -349,126 +336,73 @@ class App extends Component {
 	}
 
 	render(){
-		if( !this.state.data ){
-			return <CircularProgress />;
-		}
-		let section = this.props.children ? React.cloneElement(this.props.children,{
+		let main = this.props.children ? React.cloneElement(this.props.children,{
 			onToggleSidebar: this._toggleSidebar,
 			onTogglePreview: this._togglePreview,
 		}) : <div>NO CHILD</div>;
 		let styles = this.styles();
 		return <div style={styles.container}>
 			<div style={styles.sidebar}>
-				<div style={styles.clip}>
-					<List>
-						<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={this.state.data.types.map(t =>
-							<ListItem key={t.name} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
-						)} />
-						<ListItem primaryText="Settings" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
-							<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
-						]} />
-						<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} />
-						<ListItem primaryText="Logout" leftIcon={<FontIcon>exit_to_app</FontIcon>} onClick={this._logout} />
-						<ListItem primaryText="Switch App" leftIcon={<FontIcon>shuffle</FontIcon>} onClick={this._closeSession} />
-					</List>
-				</div>
+				{this.props.sidebar}
 			</div>
 			<div style={styles.main} onClickCapture={this._captureClick}>
-				{section}
+				{main}
 			</div>
 			<div style={styles.preview} onClickCapture={this._captureClick}>
-				<div>iframe</div>
+				{this.props.preview}
 			</div>
 		</div>;
 	}
 }
 
-class CreateContentDialog extends React.Component {
+class AppSidebar extends Component {
 
-	state = {error: null};
-	constructor(...args){
-		super(...args);
-		this.state = {
-			node: {
-				id: uuid.v4(),
-				values: {},
+	static propTypes = {
+		onClickLogout: PropTypes.func.isRequired,
+		onClickClose: PropTypes.func.isRequired,
+	}
+
+	getQuery(){
+		return `
+			types {
+				name
 			}
-		};
+		`
 	}
 
-	set = (k,v) => {
-		let node = this.state.node;
-		node.values[k] = v;
-		this.setState({node: node});
+	_clickLogout = () => {
+		this.props.onClickLogout()
 	}
 
-	setType = (v) => {
-		let node = this.state.node;
-		node.type = v;
-		this.setState({node: node});
+	_clickClose = () => {
+		this.props.onClickClose()
 	}
 
-	setID = (v) => {
-		let node = this.state.node;
-		node.id = v;
-		this.setState({node: node});
+	_clickTypes = () => {
+		this.go('/types')
 	}
 
-	_onSubmit = () => {
-		this.store(conn => {
-			return conn.setNode(this.state.node)
-				.then(this._onCreate)
-		})
-	}
-
-	_onCreate = () => {
-		this.go(`/nodes/${this.state.node.id}`);
-	}
-
-	_onError = (err) => {
-		this.setState({error: err.toString()});
+	_clickContent = (type) => {
+		this.go(`/types/${type.name}/nodes`)
 	}
 
 	render(){
-		let types = this.props.types;
-		return <Dialog modal isOpen
-			title="Create Content"
-			close={() => console.log('close')}
-			dialogStyle={{ maxWidth: 320 }}
-			actions={[{
-				onClick: () => {},
-				label: 'Cancel',
-			}, {
-				onClick: this._onSubmit,
-				primary: true,
-				label: 'OK',
-			}]}
-		>
-			<div>
-				<SelectField
-					ref="type"
-					label="Type"
-					menuItems={types.map(t => t.name)}
-					value={this.state.node.type}
-					onChange={this.setType}
-					adjustMinWidth
-					floatingLabel
-					fullWidth
-				/>
-			</div>
-			<div>
-				<TextField
-					ref="id"
-					label="ID"
-					value={this.state.node.id}
-					onChange={this.setID}
-					fullWidth
-					errorText={this.state.error}
-				/>
-			</div>
-			<div style={{width:500,height:50}}>
-			</div>
-		</Dialog>
+		if( !this.state.data ){
+			return <CircularProgress />;
+		}
+		return <Scroll>
+			<List>
+				<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={this.state.data.types.map(t =>
+					<ListItem key={t.name} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
+				)} />
+				<ListItem primaryText="Settings" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
+					<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
+				]} />
+				<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} />
+				<ListItem primaryText="Logout" leftIcon={<FontIcon>exit_to_app</FontIcon>} onClick={this._clickLogout} />
+				<ListItem primaryText="Switch App" leftIcon={<FontIcon>shuffle</FontIcon>} onClick={this._clickClose} />
+			</List>
+		</Scroll>;
 	}
 }
 
@@ -565,7 +499,7 @@ class TypeEditPane extends Component {
 	state = {}
 
 	isNew(){
-		return this.props.route.isNew
+		return this.props.isNew
 	}
 
 	getQuery(){
@@ -745,13 +679,13 @@ const BooleanAttr = ({node,field,attr,onChange}) => {
        	if( attr ){
 		on = attr.value === true ||
 			attr.value === 1 ||
-			(/^(true|yes|y|t|on)$/i).test((attr.value || '').toString());
+			(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
 	}
 	return (
 		<Switch
 			label={field.name}
 			toggled={on}
-			onChange={onChange} />
+			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})} />
 	)
 }
 
@@ -785,7 +719,11 @@ class ImageAttr extends PureComponent {
 
 	_onLoad = (file, uploadResult) => {
 		const { name, size, type, lastModifiedDate } = file;
-		this.props.onChange(uploadResult);
+		this.props.onChange({
+			name: this.props.field.name,
+			value: uploadResult,
+			enc: 'DataURI',
+		});
 
 		this._timeout = setTimeout(() => {
 			this._timeout = null;
@@ -869,10 +807,15 @@ class Attr extends React.Component {
 
 class NodeEditPane extends Component {
 
+	static propTypes = {
+		route: PropTypes.object.isRequired,
+		params: PropTypes.object.isRequired,
+	}
+
 	state = {attrs: {}}
 
 	isNew(){
-		return !!this.props.route.isNew;
+		return this.props.route.isNew;
 	}
 
 	getID(){
@@ -935,7 +878,6 @@ class NodeEditPane extends Component {
 
 	getNode(){
 		let node = this.state.data.node || {attrs:[]};
-		console.log('fetched', node);
 		let mergedNode = Object.assign({}, node);
 		let type = this.state.data.type;
 		if( type ){
@@ -966,8 +908,8 @@ class NodeEditPane extends Component {
 			console.error('_setAttr: missing attr.name');
 			return;
 		}
-		if( !attr.value ){
-			console.error('_setAttr: missing attr.name');
+		if( !attr.hasOwnProperty('value') ){
+			console.error('_setAttr: missing attr.value');
 			return;
 		}
 		let attrs = Object.assign({}, this.state.attrs, {
@@ -977,26 +919,31 @@ class NodeEditPane extends Component {
 	}
 
 	_save = () => {
-		let values;
+		let values = {
+			id: this.isNew() ? uuid.v4() : this.getID(),
+			attrs: Object.keys(this.state.attrs).reduce((attrs,k) => {
+				let attr = this.state.attrs[k];
+				attrs.push(attr);
+				return attrs;
+			},[]),
+		};
+		// abort without save if no changes
+		if( !this.isNew() && values.attrs.length == 0 ){
+			return this._afterSave();
+		}
 		this.store(conn => {
-			values = {
-				id: this.isNew() ? uuid.v4() : this.getID(),
-				attrs: Object.keys(this.state.attrs).reduce((attrs,k) => {
-					let attr = this.state.attrs[k];
-					attrs.push(attr);
-					return attrs;
-				},[]),
-			};
 			if( this.isNew() ){
 				values.type = this.getTypeName();
 				return conn.setNode(values);
 			} else {
 				return conn.mergeNode(values);
 			}
-		}).then(() => {
-			let node = this.getNode();
-			this.go(`/types/${node.type.name}/nodes`)
-		})
+		}).then(this._afterSave)
+	}
+
+	_afterSave = () => {
+		let node = this.getNode();
+		this.go(`/types/${node.type.name}/nodes`)
 	}
 
 	render(){
@@ -1040,7 +987,7 @@ class NodeListPane extends Component {
 	}
 
 	getTypeName(){
-		return this.props.type || this.props.params.name;
+		return this.props.params.name;
 	}
 
 	getQuery(){
@@ -1085,6 +1032,9 @@ class NodeListPane extends Component {
 	render(){
 		if( !this.state.data ){
 			return <CircularProgress />
+		}
+		if( !this.state.data.type ){
+			return <div>'waiting on type'</div>;
 		}
 		let type = this.state.data.type;
 		let nodes = this.state.data.nodes;
@@ -1132,15 +1082,37 @@ const Home = () => (
 );
 Home.title = "Home";
 
-class SelectApp extends Component {
+class SelectApp extends React.Component {
 
 	static propTypes = {
+		userToken: PropTypes.string.isRequired,
+		onSelect: PropTypes.func.isRequired,
 		onCreate: PropTypes.func.isRequired,
-		onStartSession: PropTypes.func.isRequired,
-		apps: PropTypes.arrayOf(PropTypes.string),
+		onError: PropTypes.func.isRequired,
 	}
 
 	state = {tab:0}
+
+	componentDidMount(){
+		this.fetchApps();
+	}
+
+	fetchApps(){
+		let userToken = this.props.userToken;
+		let sessionToken = this.props.sessionToken;
+		return client.getUser({userToken})
+			.then(this._load)
+			.catch(this._error);
+	}
+
+	_load = (user) => {
+		let perms = user.apps || [];
+		let apps = Object.keys(perms.reduce((as,a) => {
+			as[a.id] = a;
+			return as;
+		},{}));
+		this.setState({apps})
+	}
 
 	_submit = (e) => {
 		if( e.preventDefault ){
@@ -1152,7 +1124,7 @@ class SelectApp extends Component {
 	}
 
 	_select = (id) => {
-		this.props.onStartSession({id})
+		this.props.onSelect({id})
 	}
 
 	_onChangeAppID = (v) => {
@@ -1161,6 +1133,10 @@ class SelectApp extends Component {
 
 	_setTab = (idx) => {
 		this.setState({tab: idx})
+	}
+
+	_error = (err) => {
+		this.props.onError(err)
 	}
 
 	renderActions(){
@@ -1189,25 +1165,28 @@ class SelectApp extends Component {
 	}
 
 	renderSelectTab(){
-		let apps = this.props.apps;
-		if( !apps || apps.length == 0 ){
+		if( this.state.apps.length === 0 ){
 			return <div style={{margin:30}}>
 				<p>You do not currently have any sites. Click on the 'new' tab</p>
 			</div>;
 		}
 		return <List>
-			{apps.map(id => <ListItem key={id} primaryText={id} onClick={this._select.bind(this,id)} />)}
+			{this.state.apps.map(id => <ListItem key={id} primaryText={id} onClick={this._select.bind(this,id)} />)}
 		</List>;
 	}
 
 	renderTab(){
 		if( this.state.tab == 0 ){
 			return this.renderSelectTab();
+		} else {
+			return this.renderCreateTab();
 		}
-		return this.renderCreateTab();
 	}
 
 	render(){
+		if( !this.state.apps ){
+			return <CircularProgress />;
+		}
 		return <form className="md-card-list" onSubmit={this._submit}>
 			<Dialog isOpen close={() => {}} modal>
 				<Tabs centered fixedWidth primary>
@@ -1221,128 +1200,19 @@ class SelectApp extends Component {
 
 }
 
-class Connection extends Component {
+class Login extends React.Component {
 
 	static propTypes = {
-		userToken: PropTypes.string.isRequired,
-		sessionToken: PropTypes.string,
+		onAuthenticated: PropTypes.func,
+		onError: PropTypes.func,
 	}
 
-	static childContextTypes = {
-		conn: PropTypes.object,
+	onAuthenticated(userToken){
+		this.props.onAuthenticated(userToken)
 	}
 
-	state = {user: null}
-
-	componentDidMount(){
-		this.refreshApps();
-	}
-
-	refreshApps(){
-		let userToken = this.props.userToken;
-		let sessionToken = this.props.sessionToken;
-		return client.getUser({userToken}).then((u) => {
-			this.setState({user: u})
-		}).then((u) => {
-			if( sessionToken ){
-				return client.connectSession({sessionToken})
-					.then(this._onConnect)
-			}
-		}).catch(err => {
-			this.addToast(err);
-		})
-	}
-
-	getChildContext(){
-		return {
-			conn: this.state.conn
-		}
-	}
-
-	getApps(){
-		let u = this.state.user;
-		let apps = u && u.apps ? u.apps : [];
-		return Object.keys(apps.reduce((as,a) => {
-			as[a.id] = a;
-			return as;
-		},{}));
-	}
-
-	_onConnect = (conn) => {
-		this.setState({conn})
-	}
-
-	_createApp = ({id}) => {
-		return client.createApp({
-			userToken: this.props.userToken,
-			id,
-		}).then(() => {
-			return this.refreshApps()
-		}).then(() => {
-			return this._startSession({id})
-		}).catch(err => {
-			this.addToast(`Failed to create app: ${err.message}`);
-		})
-	}
-
-	_closeSession = () => {
-		// return client.closeSession({
-		// 	sessionToken: this.state.sessionToken
-		// })
-		this.setState({conn: null});
-	}
-
-	_startSession = ({id}) => {
-		return client.createSession({
-			appID: id,
-			userToken: this.props.userToken,
-		})
-		.then(({sessionToken}) => {
-			return client.connectSession({sessionToken}).then(conn => {
-				localStorage.setItem('sessionToken', sessionToken);
-				return conn;
-			})
-		})
-		.then(this._onConnect)
-		.catch(err => {
-			this.addToast(`Failed to create session: ${err.message}`);
-		})
-	}
-
-	render(){
-		let user = this.state.user;
-		if( !user ){
-			return <CircularProgress />;
-		}
-		if( this.state.conn ){
-			return <App onCloseSession={this._closeSession}>
-				{this.props.children}
-			</App>;
-		}
-		return <SelectApp apps={this.getApps()} onStartSession={this._startSession} onCreate={this._createApp}/>
-	}
-}
-
-class Session extends Component {
-
-	static propTypes = {
-		userToken: PropTypes.string,
-		sessionToken: PropTypes.string,
-	}
-
-	state = {userToken: null, tab:0}
-
-	getUserToken(){
-		return this.props.userToken || this.state.userToken;
-	}
-
-	setUserToken(userToken){
-		localStorage.setItem('userToken', userToken);
-		this.setState({userToken});
-	}
-
-	setError(msg){
-		this.addToast(msg);
+	onError(msg){
+		this.props.onError(msg);
 	}
 
 	_login = (e) => {
@@ -1353,9 +1223,9 @@ class Session extends Component {
 			id: this.state.username,
 			password: this.state.password,
 		}).then(({userToken}) => {
-			this.setUserToken(userToken);
+			this.onAuthenticated(userToken);
 		}).catch(err => {
-			this.setError(`Authentication failed: ${err.message}`)
+			this.onError(`Authentication failed: ${err.message}`)
 		})
 	}
 
@@ -1372,12 +1242,12 @@ class Session extends Component {
 				userToken,
 				id: this.state.appID,
 			}).catch(err => {
-				this.setError(`Failed to create app: ${err.message}`);
+				this.onError(`Failed to create app: ${err.message}`);
 			}).then(() => {
-				this.setUserToken(userToken);
+				this.onAuthenticated(userToken);
 			})
 		}).catch(err => {
-			this.setError(`Login failed: ${err.message}`)
+			this.onError(`Login failed: ${err.message}`)
 		})
 	}
 
@@ -1447,7 +1317,7 @@ class Session extends Component {
 			this.renderRegisterForm();
 	}
 
-	renderLoginDialog(){
+	render(){
 		return <div className="md-card-list">
 			<Dialog isOpen close={() => {}} modal>
 				<Tabs centered fixedWidth primary>
@@ -1459,12 +1329,40 @@ class Session extends Component {
 		</div>;
 	}
 
+}
+
+
+class App extends React.Component {
+
+	static propTypes = {
+		id: PropTypes.string.isRequired,
+		userToken: PropTypes.string.isRequired,
+		onClickClose: PropTypes.func.isRequired,
+		onClickLogout: PropTypes.func.isRequired,
+		onError: PropTypes.func.isRequired,
+	}
+
+	static childContextTypes = {
+		onError: PropTypes.func.isRequired,
+		userToken: PropTypes.string.isRequired,
+		appID: PropTypes.string.isRequired,
+	}
+
+	getChildContext(){
+		return {
+			onError: this.props.onError,
+			userToken: this.props.userToken,
+			appID: this.props.id,
+		};
+	}
+
 	render(){
-		let token = this.getUserToken();
-		if( !token ){
-			return this.renderLoginDialog();
-		}
-		return <Connection sessionToken={this.props.sessionToken} userToken={token}>{this.props.children}</Connection>;
+		return <AppLayout
+			sidebar={<AppSidebar
+				onClickClose={this.props.onClickClose}
+				onClickLogout={this.props.onClickLogout} />}
+			preview={<p>preview</p>}
+		>{this.props.children}</AppLayout>;
 	}
 }
 
@@ -1473,13 +1371,19 @@ class Session extends Component {
 class Chrome extends React.Component {
 
 	static childContextTypes = {
-		addToast: PropTypes.func.isRequired,
 		mobile: PropTypes.bool.isRequired,
 		tablet: PropTypes.bool.isRequired,
 		desktop: PropTypes.bool.isRequired,
 	};
 
-	state = {toasts: []}
+	constructor(props,...args){
+		super(props, ...args);
+		this.state = {toasts:[]};
+		if( props.route ){
+			this.state.userToken = props.route.userToken;
+			this.state.appID = props.route.appID;
+		}
+	}
 
 	componentWillUnmount() {
 		if( this.unlisten ){
@@ -1487,6 +1391,17 @@ class Chrome extends React.Component {
 			this.unlisten = null;
 		}
 	}
+
+	// TODO: do this propperly
+	// This is currently required as I misunderstood how react-router keeps previously
+	// mounted components... the propper way to handle this is to have each Component
+	// perform it's own check rather than re-rendering the entire chrome
+	componentWillReceiveProps(nextProps){
+		if( nextProps.location.pathname != this.props.location.pathname ){
+			this.setState({pathname: nextProps.location.pathname});
+		}
+	}
+
 
 	componentDidMount(){
 		const mq = {
@@ -1508,7 +1423,6 @@ class Chrome extends React.Component {
 
 	getChildContext(){
 		return {
-			addToast: this._addToast,
 			mobile: !!this.state.mobile,
 			tablet: !!this.state.tablet,
 			desktop: !!this.state.desktop,
@@ -1522,7 +1436,7 @@ class Chrome extends React.Component {
 		this.setState({ toasts });
 	}
 
-	_addToast = (msg, action) => {
+	_toast = (msg, action) => {
 		if( !msg ){
 			return;
 		}
@@ -1539,11 +1453,46 @@ class Chrome extends React.Component {
 		this.setState({toasts});
 	}
 
+	_createApp = ({id}) => {
+		return client.createApp({
+			userToken: this.state.userToken,
+			id,
+		})
+		.then(this._selectApp)
+		.catch(this._toast)
+	}
+
+	_selectApp = ({id}) => {
+		this.setState({appID: id})
+	}
+
+	_removeAppID = () => {
+		this.setState({appID: null})
+	}
+
+	_removeUserToken = () => {
+		this.setState({userToken: null})
+	}
+
+	_authenticated = (userToken) => {
+		this.setState({userToken});
+	}
+
+	renderMain(){
+		if( !this.state.userToken ){
+			return <Login onAuthenticated={this._authenticated} onError={this._toast} />
+		}
+		if( !this.state.appID ){
+			return <SelectApp userToken={this.state.userToken} onSelect={this._selectApp} onCreate={this._createApp} onError={this._toast}/>
+		}
+		return <App id={this.state.appID} userToken={this.state.userToken} onClickClose={this._removeAppID} onClickLogout={this._removeUserToken} onError={this._toast}>
+			{this.props.children}
+		</App>;
+	}
+
 	render(){
 		return <div>
-			<Session userToken={this.props.route.userToken} sessionToken={this.props.route.sessionToken}>
-				{this.props.children}
-			</Session>
+			{this.renderMain()}
 			<Snackbar
 				toasts={this.state.toasts}
 				dismiss={this._dismissToast}
@@ -1555,17 +1504,17 @@ class Chrome extends React.Component {
 
 const AppRouter = (props) => <Router history={browserHistory}>
 	<Route path="/" {...props} component={Chrome}>
-		<IndexRoute component={Home}/>
-		<Route path="types" component={TypesPane}/>
-		<Route path="types/new" isNew={true} component={TypeEditPane}/>
-		<Route path="types/:name" component={TypeEditPane}/>
-		<Route path="types/:name/nodes" component={NodeListPane}/>
-		<Route path="types/:name/nodes/new" isNew={true} component={NodeEditPane}/>
-		<Route path="nodes/:id" component={NodeEditPane}/>
+		<IndexRoute component={Home} />
+		<Route path="types" component={TypesPane} />
+		<Route path="types/new" isNew={true} component={TypeEditPane} />
+		<Route path="types/:name" component={TypeEditPane} />
+		<Route path="types/:name/nodes" component={NodeListPane} />
+		<Route path="types/:name/nodes/new" isNew={true} component={NodeEditPane} />
+		<Route path="nodes/:id" component={NodeEditPane} />
 	</Route>
 </Router>;
 
 let localUserToken = localStorage.getItem('userToken');
-let localSessionToken = localStorage.getItem('sessionToken');
-render(<AppRouter userToken={localUserToken} sessionToken={localSessionToken} />, document.getElementById('app'))
+let loadAppID = localStorage.getItem('appID');
+render(<AppRouter userToken={localUserToken} appID={loadAppID} />, document.getElementById('app'))
 

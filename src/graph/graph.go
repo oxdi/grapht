@@ -172,7 +172,7 @@ func (g *Graph) DefineType(t Type) *Graph {
 		if f.Name == "" {
 			panic("cannot create field with blank name")
 		}
-		if (f.Type == HasOne || f.Type == HasMany) && (f.Edge == "") {
+		if (f.Type == HasOne || f.Type == HasMany) && (f.EdgeName == "") {
 			panic("edge name required for HasOne,HasMany field types")
 		}
 	}
