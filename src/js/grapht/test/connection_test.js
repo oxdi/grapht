@@ -974,3 +974,51 @@ test("textCharLimit", function(t){
 		})
 	})
 });
+
+test("textMarkup", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"contentA",type:"Text",textMarkup:null},
+			{name:"contentB",type:"Text",textMarkup:""},
+			{name:"contentC",type:"Text",textMarkup:"MARKDOWN"},
+		]
+	},`
+		fields {
+			textMarkup
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{textMarkup: null},
+				{textMarkup: null},
+				{textMarkup: 'MARKDOWN'},
+			]
+		})
+	})
+});
+
+test("required", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"contentA",type:"Text",required:true},
+			{name:"contentB",type:"Text",required:false},
+			{name:"contentC",type:"Text",required:null},
+		]
+	},`
+		fields {
+			required
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{required: true},
+				{required: false},
+				{required: false},
+			]
+		})
+	})
+});

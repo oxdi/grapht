@@ -776,6 +776,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"type": &graphql.InputObjectFieldConfig{
 							Type: graphql.NewNonNull(graphql.String),
 						},
+						"required": &graphql.InputObjectFieldConfig{
+							Type: graphql.Boolean,
+						},
 						"edgeName": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
