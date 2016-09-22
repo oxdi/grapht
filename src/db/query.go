@@ -277,6 +277,20 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 				Type:        graphql.String,
 				Description: "helpful info",
 			},
+			"friendlyName": &graphql.Field{
+				Type:        graphql.String,
+				Description: "the name to show the public",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return fd.Name, nil
+					}
+					if fd.FriendlyName == "" {
+						return fd.Name, nil
+					}
+					return fd.FriendlyName, nil
+				},
+			},
 			"edgeToType": &graphql.Field{
 				Type:        graphql.String,
 				Description: "optional type of target nodes",
@@ -799,6 +813,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 							Type: graphql.Boolean,
 						},
 						"hint": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+						"friendlyName": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
 						"edgeName": &graphql.InputObjectFieldConfig{

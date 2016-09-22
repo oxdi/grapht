@@ -6,8 +6,9 @@ type Field struct {
 	Description string `json:"description"`
 
 	// Generic opts
-	Required bool   `json:"required"`
-	Hint     string `json:"hint"`
+	FriendlyName string `json:"friendlyName"`
+	Required     bool   `json:"required"`
+	Hint         string `json:"hint"`
 
 	// Text opts
 	TextMarkup    string `json:"textMarkup"`

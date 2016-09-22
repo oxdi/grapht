@@ -1078,3 +1078,25 @@ test("field hint", function(t){
 		})
 	})
 });
+
+test("friendlyName", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"contentA",type:"Text",friendlyName:"Non techy name"},
+			{name:"contentB",type:"Text"},
+		]
+	},`
+		fields {
+			friendlyName
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{friendlyName: "Non techy name"},
+				{friendlyName: "contentB"},
+			]
+		})
+	})
+});

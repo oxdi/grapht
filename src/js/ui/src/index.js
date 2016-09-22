@@ -7,6 +7,21 @@ import { Router, Route, Link, browserHistory, IndexRoute } from 'react-router'
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
+const MAIN_WIDTH = 380;
+const FIELD_FRAGMENT = `
+	name
+	type
+	required
+	edgeName
+	edgeToType
+	textMarkup
+	textLines
+	textLineLimit
+	textCharLimit
+	hint
+	friendlyName
+`;
+
 import {
 	IconButton,
 	FlatButton,
@@ -275,7 +290,7 @@ class AppLayout extends Component {
 			main: {
 				position: 'relative',
 				backgroundColor: '#fff',
-				flex: '0 0 320px',
+				flex: `0 0 ${MAIN_WIDTH}px`,
 				zIndex: 2,
 				borderRight: '1px #ccc',
 				borderTopRightRadius: 2,
@@ -431,16 +446,24 @@ class FieldExpansionPanel extends React.Component {
 		this.setFieldState({required});
 	}
 
+	_setHint = (hint) => {
+		this.setFieldState({hint});
+	}
+
 	_setType = (type) => {
 		this.setFieldState({type});
 	}
 
-	_setTextCharLimit = ({textCharLimit}) => {
+	_setTextCharLimit = (textCharLimit) => {
 		this.setFieldState({textCharLimit});
 	}
 
-	_setTextLineLimit = ({textLineLimit}) => {
+	_setTextLineLimit = (textLineLimit) => {
 		this.setFieldState({textLineLimit});
+	}
+
+	_setFriendlyName = (friendlyName) => {
+		this.setFieldState({friendlyName});
 	}
 
 	_setMultiline = (on) => {
@@ -498,10 +521,7 @@ class FieldExpansionPanel extends React.Component {
 
 	render(){
 		let field = this.props.field;
-		let labels = this.state.expanded ? {
-			label: field.name,
-		} : {
-			label: field.name,
+		let labels = this.state.expanded ? {} : {
 			secondaryLabel: [field.type]
 		};
 		return (
@@ -512,22 +532,30 @@ class FieldExpansionPanel extends React.Component {
 				cancelLabel=""
 				expanded={this.state.expanded}
 				onExpandToggle={this._toggleExpanded}
+				label={field.friendlyName || ' '}
 				{...labels}
 			>
 				<form>
 					<div>
 						<TextField
-							ref="name"
 							label="Name"
+							value={field.friendlyName}
+							onChange={this._setFriendlyName}
+							fullWidth
+							helpText="A friendly name for the field to show to humans"
+						/>
+					</div>
+					<div>
+						<TextField
+							label="API field name"
 							value={field.name}
 							onChange={this._setName}
 							fullWidth
-							helpText="The name of the field"
+							helpText="API field names are seen by machines and developers. They should be camelcase without spaces (wheelsOnBus not wheels_on_bus)"
 						/>
 					</div>
 					<div>
 						<SelectField
-							ref="type"
 							label="Type"
 							value={field.type}
 							onChange={this._setType}
@@ -544,6 +572,15 @@ class FieldExpansionPanel extends React.Component {
 							label="Field is manditory"
 							toggled={field.required}
 							onChange={this._setRequired}
+						/>
+					</div>
+					<div>
+						<TextField
+							label="hint"
+							value={field.hint || ''}
+							onChange={this._setHint}
+							fullWidth
+							helpText="Helpful text to help guide people filling in the data. Just like this!"
 						/>
 					</div>
 				</form>
@@ -594,15 +631,7 @@ class TypeEditPane extends Component {
 			type(name:"${name}"){
 				name
 				fields {
-					name
-					type
-					required
-					edgeName
-					edgeToType
-					textMarkup
-					textLines
-					textLineLimit
-					textCharLimit
+					${FIELD_FRAGMENT}
 				}
 			}
 		`;
@@ -643,6 +672,7 @@ class TypeEditPane extends Component {
 	_save = () => {
 		let type = this.getType();
 		this.store(conn => {
+			console.log('setType', type);
 			return conn.setType(type);
 		}).then(() => {
 			this.go('/types');
@@ -749,19 +779,25 @@ class TypesPane extends Component {
 	}
 }
 
-const TextAttr = ({node,field,attr,onChange}) => {
+const TextAttr = ({node,field,attr,onChange,type}) => {
+	let opts = {};
+	if( field.textLines > 1 ){
+		opts.rows = field.textLines;
+		opts.maxRows = field.textLineLimit > 1 ? field.textLineLimit : -1;
+	}
+	if( type ){
+		opts.type = type;
+	}
 	return (
 		<TextField
-			block
-			label={field.name}
-			placeholder={field.name}
-			value={attr.value}
-			rows={field.textLines}
-			maxLength={field.textCharLimit}
-			maxRows={field.textLineLimit > 1 ? field.textLineLimit : -1}
 			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})}
+			label={field.friendlyName}
+			value={attr.value}
+			maxLength={field.textCharLimit}
 			fullWidth
 			helpText={field.hint}
+			required={field.required}
+			{...opts}
 		/>
 	)
 }
@@ -931,15 +967,7 @@ class NodeEditPane extends Component {
 		let typeFragment = `
 			name
 			fields {
-				name
-				type
-				required
-				edgeName
-				edgeToType
-				textMarkup
-				textLines
-				textLineLimit
-				textCharLimit
+				${FIELD_FRAGMENT}
 			}
 		`;
 		if( type ){
@@ -1063,10 +1091,7 @@ class NodeEditPane extends Component {
 					</div>}
 				/>
 				{node.type.fields.map(f =>
-						<div>
-							<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
-							<Divider />
-						</div>
+					<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
 				)}
 			</Scroll>
 		</div>
