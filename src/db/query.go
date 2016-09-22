@@ -273,6 +273,10 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 				Type:        graphql.NewNonNull(graphql.Boolean),
 				Description: "is field required",
 			},
+			"hint": &graphql.Field{
+				Type:        graphql.String,
+				Description: "helpful info",
+			},
 			"edgeToType": &graphql.Field{
 				Type:        graphql.String,
 				Description: "optional type of target nodes",
@@ -312,9 +316,24 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 					return fd.TextMarkup, nil
 				},
 			},
+			"textLines": &graphql.Field{
+				Type:        graphql.Int,
+				Description: "number of lines to show for field 0=1",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return 1, nil
+					}
+					lines := fd.TextLines
+					if lines <= 0 {
+						return 1, nil
+					}
+					return lines, nil
+				},
+			},
 			"textLineLimit": &graphql.Field{
 				Type:        graphql.Int,
-				Description: "limit number of lines 0=nolimit",
+				Description: "limit number of lines 0=limit-to-textLines",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					fd, ok := p.Source.(*graph.Field)
 					if !ok {
@@ -779,6 +798,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"required": &graphql.InputObjectFieldConfig{
 							Type: graphql.Boolean,
 						},
+						"hint": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
 						"edgeName": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
@@ -787,6 +809,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						},
 						"textMarkup": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
+						},
+						"textLines": &graphql.InputObjectFieldConfig{
+							Type: graphql.Int,
 						},
 						"textLineLimit": &graphql.InputObjectFieldConfig{
 							Type: graphql.Int,

@@ -413,34 +413,106 @@ class FieldExpansionPanel extends React.Component {
 		onChange: PropTypes.func.isRequired,
 	}
 
-	state = {}
+	state = {expanded: false}
 
-	_onSave = () => {
-		let field = this.getField();
-		this.props.onChange(this.props.field, field);
+	_toggleExpanded = (expanded) => {
+		this.setState({expanded})
+	}
+
+	_collapse = () => {
+		this.setState({expanded:false})
 	}
 
 	_setName = (name) => {
-		this.setState({name});
+		this.setFieldState({name});
+	}
+
+	_setRequired = (required) => {
+		this.setFieldState({required});
 	}
 
 	_setType = (type) => {
-		this.setState({type});
+		this.setFieldState({type});
 	}
 
-	getField(){
-		return Object.assign({}, this.props.field, this.state)
+	_setTextCharLimit = ({textCharLimit}) => {
+		this.setFieldState({textCharLimit});
+	}
+
+	_setTextLineLimit = ({textLineLimit}) => {
+		this.setFieldState({textLineLimit});
+	}
+
+	_setMultiline = (on) => {
+		let lines = 5;
+		if( this.props.textLines > def ){
+			lines = this.props.textLines;
+		}
+		this.setFieldState({textLines: on ? lines : 0});
+	}
+
+	setFieldState(state){
+		let newField = Object.assign({}, this.props.field, state);
+		this.props.onChange(this.props.field, newField)
+	}
+
+	renderTextOptions(field){
+		let lineLimit = field.textLines > 1 ? <div>
+			<TextField
+				label="Line limt"
+				value={field.textLineLimit}
+				onChange={this._setTextLineLimit}
+				fullWidth
+				helpText="Restrict how many lines of text this field can grow to accomodate"
+				type="number"
+			/>
+		</div> : null;
+		return <div>
+			<div>
+				<Switch
+					label="Multiline"
+					toggled={field.textLines > 1}
+					onChange={this._setMultiline}
+				/>
+			</div>
+			{lineLimit}
+			<div>
+				<TextField
+					label="Character limit"
+					value={field.textCharLimit}
+					onChange={this._setTextCharLimit}
+					fullWidth
+					helpText="Restrict how much text can go into this field. Set to zero for no limit"
+					type="number"
+				/>
+			</div>
+		</div>;
+	}
+
+	renderOptions(field){
+		switch(field.type){
+			case 'Text': return this.renderTextOptions(field);
+			default: return;
+		}
 	}
 
 	render(){
-		let field = this.getField();
+		let field = this.props.field;
+		let labels = this.state.expanded ? {
+			label: field.name,
+		} : {
+			label: field.name,
+			secondaryLabel: [field.type]
+		};
 		return (
 			<ExpansionPanel
-				label={field.name}
-				secondaryLabel={[
-					field.type,
-				]}
-				onSave={this._onSave}
+				saveLabel="done"
+				onSave={this._collapse}
+				onCancel={this._collapse}
+				cancelLabel=""
+				expanded={this.state.expanded}
+				onExpandToggle={this._toggleExpanded}
+				{...labels}
 			>
 				<form>
 					<div>
@@ -464,6 +536,14 @@ class FieldExpansionPanel extends React.Component {
 							adjustMinWidth
 							floatingLabel
 							fullWidth
+						/>
+					</div>
+					{this.renderOptions(field)}
+					<div>
+						<Switch
+							label="Field is manditory"
+							toggled={field.required}
+							onChange={this._setRequired}
 						/>
 					</div>
 				</form>
@@ -516,6 +596,13 @@ class TypeEditPane extends Component {
 				fields {
 					name
 					type
+					required
+					edgeName
+					edgeToType
+					textMarkup
+					textLines
+					textLineLimit
+					textCharLimit
 				}
 			}
 		`;
@@ -601,7 +688,7 @@ class TypeEditPane extends Component {
 						<Subheader primaryText="Fields" />
 					</List>
 					<ExpansionList>
-						{type.fields.map(f => <FieldExpansionPanel key={`${type.name}__${f.name}`} field={f} onChange={this._setField} />)}
+						{type.fields.map((f,idx) => <FieldExpansionPanel key={idx} field={f} onChange={this._setField} />)}
 					</ExpansionList>
 					<div style={{height:80}}> </div>
 				</Scroll>
@@ -665,8 +752,13 @@ class TypesPane extends Component {
 const TextAttr = ({node,field,attr,onChange}) => {
 	return (
 		<TextField
+			block
 			label={field.name}
+			placeholder={field.name}
 			value={attr.value}
+			rows={field.textLines}
+			maxLength={field.textCharLimit}
+			maxRows={field.textLineLimit > 1 ? field.textLineLimit : -1}
 			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})}
 			fullWidth
 			helpText={field.hint}
@@ -841,6 +933,13 @@ class NodeEditPane extends Component {
 			fields {
 				name
 				type
+				required
+				edgeName
+				edgeToType
+				textMarkup
+				textLines
+				textLineLimit
+				textCharLimit
 			}
 		`;
 		if( type ){
@@ -963,17 +1062,12 @@ class NodeEditPane extends Component {
 						<IconButton onClick={this._save}>done</IconButton>
 					</div>}
 				/>
-				<div style={{margin:40}}>
-					<div className="md-card-list">
-						{node.type.fields.map(f =>
-							<Card key={f.name}>
-								<div style={{margin:20}}>
-									<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
-								</div>
-							</Card>
-						)}
-					</div>
-				</div>
+				{node.type.fields.map(f =>
+						<div>
+							<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
+							<Divider />
+						</div>
+				)}
 			</Scroll>
 		</div>
 	}

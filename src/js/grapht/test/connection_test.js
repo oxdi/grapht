@@ -935,11 +935,41 @@ test("subscription should update on guest.commit", function(t){
 
 // end of blog tests --- it's choas from here down :)
 
+test("textLines", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"contentA",type:"Text",textLines:1},
+			{name:"contentB",type:"Text",textLines:0},
+			{name:"contentC",type:"Text",textLines:null},
+			{name:"contentD",type:"Text",textLines:-1},
+			{name:"contentE",type:"Text",textLines:5},
+		]
+	},`
+		fields {
+			textLines
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{textLines: 1},
+				{textLines: 1},
+				{textLines: 1},
+				{textLines: 1},
+				{textLines: 5},
+			]
+		})
+	})
+});
+
 test("textLineLimit", function(t){
 	return admin.setType({
 		name:"T",
 		fields:[
-			{name:"content",type:"Text",textLineLimit:3},
+			{name:"content",type:"Text",textLineLimit:1},
+			{name:"content",type:"Text",textLineLimit:0},
+			{name:"content",type:"Text",textLineLimit:null},
 		]
 	},`
 		fields {
@@ -949,7 +979,9 @@ test("textLineLimit", function(t){
 	.then(function(res){
 		return t.same(res, {
 			fields: [
-				{textLineLimit: 3},
+				{textLineLimit: 1},
+				{textLineLimit: 0},
+				{textLineLimit: 0},
 			]
 		})
 	})
@@ -959,7 +991,9 @@ test("textCharLimit", function(t){
 	return admin.setType({
 		name:"T",
 		fields:[
-			{name:"content",type:"Text",textCharLimit:3},
+			{name:"contentA",type:"Text",textCharLimit:3},
+			{name:"contentB",type:"Text",textCharLimit:0},
+			{name:"contentC",type:"Text",textCharLimit:null},
 		]
 	},`
 		fields {
@@ -970,6 +1004,8 @@ test("textCharLimit", function(t){
 		return t.same(res, {
 			fields: [
 				{textCharLimit: 3},
+				{textCharLimit: 0},
+				{textCharLimit: 0},
 			]
 		})
 	})
@@ -1018,6 +1054,26 @@ test("required", function(t){
 				{required: true},
 				{required: false},
 				{required: false},
+			]
+		})
+	})
+});
+
+test("field hint", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"content",type:"Text",hint:"very helpful"},
+		]
+	},`
+		fields {
+			hint
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{hint: "very helpful"},
 			]
 		})
 	})

@@ -11,6 +11,7 @@ type Field struct {
 
 	// Text opts
 	TextMarkup    string `json:"textMarkup"`
+	TextLines     int    `json:"textLines"`
 	TextLineLimit int    `json:"textLineLimit"`
 	TextCharLimit int    `json:"textCharLimit"`
 
