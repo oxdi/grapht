@@ -18,21 +18,6 @@ function log(...args){
 	}
 }
 
-function objectToAttrs(o){
-	return Object.keys(o).reduce((attrs,k) => {
-		let attr = {
-			name: k,
-			value: o[k],
-			encoding: STRING_ENCODING
-		};
-		if( attr.value.toString ){
-			attr.value = attr.value.toString();
-		}
-		attrs.push(attr);
-		return attrs;
-	},[])
-}
-
 export default class Connection {
 
 	constructor(ws){
@@ -226,11 +211,7 @@ export default class Connection {
 
 	// example setNode({id:"0001", type:"Page", values:{name:"my page"}})
 	setNode(args, returning){
-		var node = {
-			id: args.id,
-			type: args.type,
-			attrs: objectToAttrs(args.values),
-		};
+		var node = args;
 		if( !node.id ){
 			return Promise.reject(new Error('setNode requires id'));
 		}
@@ -256,10 +237,7 @@ export default class Connection {
 	}
 
 	mergeNode(args, returning){
-		var node = {
-			id: args.id,
-			attrs: objectToAttrs(args.values),
-		};
+		var node = args;
 		if( !node.id ){
 			return Promise.reject(new Error('setNode requires id'));
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"graph"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/graphql-go/graphql"
@@ -19,6 +20,8 @@ func invalidArg(args map[string]interface{}, name string, reason string) error {
 func nilSourceError(fieldName, typeName string) error {
 	return fmt.Errorf("error fetching field '%s' for '%s': required source was nil", fieldName, typeName)
 }
+
+var validIdent = regexp.MustCompile(`^[_a-zA-Z][_a-zA-Z0-9]*$`)
 
 var reservedWords = []string{
 	"node",
@@ -226,18 +229,18 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 					if !ok {
 						return nil, castError("value", p.Source, "Attr")
 					}
-					return attr.Value, nil
+					return string(attr.Value), nil
 				},
 			},
-			"encoding": &graphql.Field{
+			"enc": &graphql.Field{
 				Type:        graphql.String,
 				Description: "how the attr value is encoded",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
-						return nil, castError("encoding", p.Source, "Attr")
+						return nil, castError("enc", p.Source, "Attr")
 					}
-					return attr.Encoding, nil
+					return attr.Enc, nil
 				},
 			},
 		},
@@ -612,16 +615,22 @@ func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
 			if err := fill(&cfg, p.Args); err != nil {
 				return nil, err
 			}
-			data := n.Attr(f.Name)
+			attr := n.Attr(f.Name)
+			if attr == nil {
+				return nil, nil
+			}
+			if attr.Enc != "DataURI" {
+				return nil, fmt.Errorf("cannot decode image from %s", attr.Enc)
+			}
 			if cfg.Width != 0 || cfg.Height != 0 {
-				img, err := decodeImageDataURI(data)
+				img, err := decodeImageDataURI(string(attr.Value))
 				if err != nil {
 					return nil, err
 				}
 				img = resizeImage(img, &cfg)
 				return encodeImageDataURI(img)
 			}
-			return data, nil
+			return string(attr.Value), nil
 		},
 	}
 }
@@ -659,7 +668,11 @@ func (cxt *GraphqlContext) Field(f *graph.Field) *graphql.Field {
 				}
 				return n.In(edgeNames...).Nodes(), nil
 			default:
-				return n.Attr(f.Name), nil
+				attr := n.Attr(f.Name)
+				if attr == nil {
+					return nil, nil
+				}
+				return string(attr.Value), nil
 			}
 		},
 	}
@@ -748,6 +761,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			}
 			t := &graph.Type{Name: args.Name}
 			for _, fa := range args.Fields {
+				if !validIdent.MatchString(fa.Name) {
+					return nil, fmt.Errorf("'%s' is not a valid name", fa.Name)
+				}
 				t.Fields = append(t.Fields, &graph.Field{
 					Name:   fa.Name,
 					Type:   fa.Type,
@@ -1021,7 +1037,7 @@ func (cxt *GraphqlContext) AttrInputObject() *graphql.InputObject {
 			"value": &graphql.InputObjectFieldConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
-			"encoding": &graphql.InputObjectFieldConfig{
+			"enc": &graphql.InputObjectFieldConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
 		},

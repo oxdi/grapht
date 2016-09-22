@@ -10,9 +10,9 @@ func stringIn(needle string, haystack []string) bool {
 }
 
 type Attr struct {
-	Name     string
-	Value    string
-	Encoding string
+	Name  string
+	Value string
+	Enc   string
 }
 
 type NodeConfig struct {
@@ -68,16 +68,16 @@ func (n *Node) Type() *Type {
 	return n.g.Type(n.n.t)
 }
 
-func (n *Node) Attr(key string) string {
+func (n *Node) Attr(key string) *Attr {
 	if n.n.attrs == nil {
-		return ""
+		return nil
 	}
 	for _, attr := range n.n.attrs {
 		if attr.Name == key {
-			return attr.Value
+			return attr
 		}
 	}
-	return ""
+	return nil
 }
 
 func (n *Node) Attrs() []*Attr {

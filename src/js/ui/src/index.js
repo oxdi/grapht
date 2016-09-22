@@ -65,7 +65,6 @@ const FloatingAddButton = (props) => <FloatingButton
 	fixed
 	tooltipPosition="top"
 	{...props}
-
 >add</FloatingButton>;
 
 class Component extends React.Component {
@@ -157,11 +156,13 @@ class Component extends React.Component {
 
 	store(tx){
 		let conn = this.conn();
-		return tx(conn).then(() => {
-			conn.commit();
-		}).catch(err => {
+		let res = tx(conn).then(() => {
+			return conn.commit();
+		})
+		res.catch(err => {
 			this.addToast(err);
 		});
+		return res;
 	}
 
 	conn(){
@@ -223,9 +224,6 @@ class App extends Component {
 	}
 
 	sidebarIsVisible(){
-		if( this.isDesktop() ){
-			return true;
-		}
 		return this.state.sidebar;
 	}
 
@@ -260,11 +258,8 @@ class App extends Component {
 		this.go('/types')
 	}
 
-	typeFilterItems(){
-		let types = this.state.data.types;
-		return types.map(t => {
-			return <ListItem key={t.name} primaryText={t.name} />;
-		})
+	_clickContent = (type) => {
+		this.go(`/types/${type.name}/nodes`)
 	}
 
 	styles(){
@@ -366,9 +361,15 @@ class App extends Component {
 			<div style={styles.sidebar}>
 				<div style={styles.clip}>
 					<List>
-						<ListItem primaryText="Types" onClick={this._clickTypes} />
-						<ListItem primaryText="Content" initiallyOpen={true} nestedItems={this.typeFilterItems()} />
-						<ListItem primaryText="Log" />
+						<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={this.state.data.types.map(t =>
+							<ListItem key={t.name} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
+						)} />
+						<ListItem primaryText="Settings" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
+							<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
+						]} />
+						<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} />
+						<ListItem primaryText="Logout" leftIcon={<FontIcon>exit_to_app</FontIcon>} onClick={this._logout} />
+						<ListItem primaryText="Switch App" leftIcon={<FontIcon>shuffle</FontIcon>} onClick={this._closeSession} />
 					</List>
 				</div>
 			</div>
@@ -376,87 +377,7 @@ class App extends Component {
 				{section}
 			</div>
 			<div style={styles.preview} onClickCapture={this._captureClick}>
-				<iframe width="100%" height="100%" style={{border:0,position:'absolute',top:0,right:0,bottom:0,left:0}} src="http://www.vacgen.com"></iframe>
-			</div>
-		</div>;
-	}
-}
-
-const TypeIcon = ({type}) => {
-	if( type.name == 'User' ){
-		return <Icon name="face" />;
-	}
-	return <Icon name="collections"/>;
-}
-
-class CreateTypeDialog extends Component {
-
-	state = {error: null};
-
-	_onSubmit = () => {
-		this.store(conn => {
-			return conn.setType({
-				name: this.refs.name.state.value,
-			})
-		})
-	}
-
-	render(){
-		return <Dialog modal isOpen
-			title="Create Type"
-			close={() => console.log('close')}
-			dialogStyle={{ maxWidth: 320 }}
-			actions={[{
-				onClick: () => {},
-				label: 'Cancel',
-			}, {
-				onClick: this._onSubmit,
-				primary: true,
-				label: 'OK',
-			}]}
-		>
-			<TextField ref="name" label="Name" errorText={this.state.error} />
-		</Dialog>
-	}
-}
-
-class CreateFieldDialog extends Component {
-
-	state = {error: null};
-
-	onSubmit = () => {
-		let type = this.props.type;
-		console.log(this.refs);
-		type.fields.push({
-			name: this.refs.name.state.value,
-			type: this.refs.type.state.value,
-		})
-		this.store(conn => {
-			return conn.setType(type)
-		})
-	}
-
-	render(){
-		let type = this.props.type;
-		return <div>
-			<div>
-				<SelectField
-					ref="type"
-					label="Type"
-					menuItems={FIELD_TYPES}
-					itemLabel="type"
-					adjustMinWidth
-					floatingLabel
-					fullWidth
-				/>
-			</div>
-			<div>
-				<TextField
-					ref="name"
-					label="Name"
-					fullWidth
-					errorText={this.state.error}
-				/>
+				<div>iframe</div>
 			</div>
 		</div>;
 	}
@@ -501,7 +422,7 @@ class CreateContentDialog extends React.Component {
 	}
 
 	_onCreate = () => {
-		this.go(`/content/${this.state.node.id}`);
+		this.go(`/nodes/${this.state.node.id}`);
 	}
 
 	_onError = (err) => {
@@ -550,16 +471,6 @@ class CreateContentDialog extends React.Component {
 		</Dialog>
 	}
 }
-
-const TypeItem = ({type}) => (
-	<ListItem
-		leftAvatar={<Avatar icon={<TypeIcon type={type} />} />}
-		rightIcon={<FontIcon>info</FontIcon>}
-		primaryText={type.name}
-		secondaryText="Custom Type"
-		onClick={() => this.go(`/types/${type.name}`)}
-	/>
-)
 
 class FieldExpansionPanel extends React.Component {
 
@@ -651,23 +562,43 @@ class TypeEditPane extends Component {
 
 	static title = 'Edit Type';
 
-	state = {type:{fields:[]}}
+	state = {}
 
-	getTypeData(){
-		return this.state.data.type;
+	isNew(){
+		return this.props.route.isNew
+	}
+
+	getQuery(){
+		if( this.isNew() ){
+			return;
+		}
+		let name = this.props.params.name;
+		if( !name || name == 'new' ){
+			return
+		}
+		return `
+			type(name:"${name}"){
+				name
+				fields {
+					name
+					type
+				}
+			}
+		`;
 	}
 
 	getType(){
 		let existing = this.state.data ? this.state.data.type || {} : {};
-		let modified = this.state.type;
-		return Object.assign({}, existing, modified);
+		let modified = this.state.type || {};
+		return Object.assign({fields:[]}, existing, modified);
 	}
 
 	_clickAdd = () => {
-		let t = this.state.type;
-		let type = Object.assign({}, t, {
-			fields: t.fields.concat({
-				name: `new field ${t.fields.length+1}`,
+		let merged = this.getType();
+		let modified = this.state.type || {};
+		let type = Object.assign({}, modified, {
+			fields: merged.fields.concat({
+				name: `newField${merged.fields.length+1}`,
 				type: 'Text',
 			}),
 		});
@@ -675,41 +606,51 @@ class TypeEditPane extends Component {
 	}
 
 	_setField = (oldField, newField) => {
-		let t = this.state.type;
-		let type = Object.assign({}, t, {
-			fields: t.fields.slice().map(f => {
+		let merged = this.getType();
+		let modified = this.state.type || {};
+		let type = Object.assign({}, modified, {
+			fields: merged.fields.slice().map(f => {
 				if( f.name == oldField.name ){
 					return newField;
 				}
 				return f;
 			})
 		});
-		console.log('setField', oldField, newField, type);
 		this.setState({type});
 	}
 
+	_save = () => {
+		let type = this.getType();
+		this.store(conn => {
+			return conn.setType(type);
+		}).then(() => {
+			this.go('/types');
+		})
+	}
+
 	_setName = (name) => {
-		let type = Object.assign({}, this.state.type, {
+		let modified = this.state.type || {};
+		let type = Object.assign({}, modified, {
 			name: name
 		})
 		this.setState({type});
 	}
 
 	render(){
-		let params = this.props.params;
+		if( !this.isNew() && !this.state.data ){
+			return <CircularProgress />;
+		}
 		let type = this.getType();
-		console.log('render type', type);
 		return (
 			<div style={{margin:40}}>
 				<Scroll>
 					<Toolbar
 						actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
 						title="Edit Type"
-						actionsRight={<IconButton onClick={this.props.onTogglePreview}>menu</IconButton>}
+						actionsRight={<div style={{marginLeft:'auto'}}>
+							<IconButton onClick={this._save}>done</IconButton>
+						</div>}
 					/>
-					<List>
-						<Subheader primaryText="Type Settings" />
-					</List>
 					<div>
 						<TextField
 							ref="name"
@@ -728,6 +669,7 @@ class TypeEditPane extends Component {
 					<ExpansionList>
 						{type.fields.map(f => <FieldExpansionPanel key={`${type.name}__${f.name}`} field={f} onChange={this._setField} />)}
 					</ExpansionList>
+					<div style={{height:80}}> </div>
 				</Scroll>
 				<FloatingAddButton onClick={this._clickAdd} />
 			</div>
@@ -755,36 +697,56 @@ class TypesPane extends Component {
 		this.go('/types/new');
 	}
 
+	typeItem(t){
+		return <ListItem
+			key={t.name}
+			leftIcon={<FontIcon>assignment</FontIcon>}
+			primaryText={t.name}
+			secondaryText="Custom Type"
+			onClick={() => this.go(`/types/${t.name}`)}
+		/>
+	}
+
+
 	render(){
 		if( !this.state.data ){
 			return <CircularProgress />;
 		}
 		let data = this.state.data;
 		return <div>
-			<List>
-				{data.types.map(t => <TypeItem key={t.name} type={t} />)}
-			</List>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title="Types"
+				/>
+				<List>
+					{data.types.map(t => this.typeItem(t) )}
+				</List>
+			</Scroll>
 			<FloatingAddButton onClick={this._clickAdd} />
 		</div>
 	}
 }
 
-const TextControl = ({node,field,value,onChange}) => {
+const TextAttr = ({node,field,attr,onChange}) => {
 	return (
 		<TextField
 			label={field.name}
-			value={value}
-			onChange={onChange}
+			value={attr.value}
+			onChange={(v) => onChange({name:field.name,value:v,encoding:'string'})}
 			fullWidth
 			helpText={field.hint}
 		/>
 	)
 }
 
-const BooleanControl = ({node,field,value,onChange}) => {
-	const on = value === true ||
-		value === 1 ||
-		(/^(true|yes|y|t|on)$/i).test((value || '').toString());
+const BooleanAttr = ({node,field,attr,onChange}) => {
+	let on = false;
+       	if( attr ){
+		on = attr.value === true ||
+			attr.value === 1 ||
+			(/^(true|yes|y|t|on)$/i).test((attr.value || '').toString());
+	}
 	return (
 		<Switch
 			label={field.name}
@@ -810,7 +772,7 @@ class UploadedImageCard extends PureComponent {
 	}
 }
 
-class ImageField extends PureComponent {
+class ImageAttr extends PureComponent {
 	constructor(...args) {
 		super(...args);
 		this.state = {};
@@ -852,9 +814,10 @@ class ImageField extends PureComponent {
 
 
 	render() {
+		let value = this.props.attr ? this.props.attr.value : '';
 		let img;
 		if( this.props.value ){
-			img = <UploadedImageCard url={this.props.value} />;
+			img = <UploadedImageCard url={value} />;
 		}
 
 		let stats;
@@ -890,122 +853,261 @@ class ImageField extends PureComponent {
 	}
 }
 
-class Control extends React.Component {
+class Attr extends React.Component {
 	render(){
 		switch( this.props.field.type ){
-		case 'Text':      return <TextControl {...this.props} />;
-		case 'Int':       return <TextControl {...this.props} type="number" />;
-		case 'Float':     return <TextControl {...this.props} type="number" />;
-		case 'Boolean':   return <BooleanControl {...this.props} />;
-		case 'Image':     return <ImageControl {...this.props} />;
+		case 'Text':      return <TextAttr {...this.props} />;
+		case 'Int':       return <TextAttr {...this.props} type="number" />;
+		case 'Float':     return <TextAttr {...this.props} type="number" />;
+		case 'Boolean':   return <BooleanAttr {...this.props} />;
+		case 'Image':     return <ImageAttr {...this.props} />;
 		// TODO: HasOne, Collections
 		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
 		}
 	}
 }
 
-class ContentEditPane extends React.Component {
+class NodeEditPane extends Component {
 
-	constructor(...args){
-		super(...args);
-		this.node = this.props.data.nodes.filter(t => t.id == this.props.params.id)[0];
-		let fields = this.node.type.fields.reduce((fs, f) => {
-			fs[f.name] = f;
-			return fs;
-		}, {});
-		this.state = {
-			values:	this.node.attrs.reduce((vs,v) => {
-				if( fields[v.name] ){
-					vs[v.name] = v.value
+	state = {attrs: {}}
+
+	isNew(){
+		return !!this.props.route.isNew;
+	}
+
+	getID(){
+		if( this.state.id ){
+			return this.state.id;
+		}
+		let id = this.props.params.id;
+		if( id == 'new' ){
+			return;
+		}
+		return;
+	}
+
+	getTypeName(){
+		return this.props.params.name;
+	}
+
+	getQuery(){
+		let q = '';
+		let type = this.getTypeName();
+		let typeFragment = `
+			name
+			fields {
+				name
+				type
+			}
+		`;
+		if( type ){
+			q = `${q}
+				type(name:"${type}"){
+					${typeFragment}
 				}
-				return vs
-			}, {}),
-			dirty: false,
-			errors: [],
-		};
+			`;
+		}
+		if( !this.isNew() ){
+			q += `${q}
+				node(id:"${this.getID()}"){
+					id
+					type {
+						${typeFragment}
+					}
+					attrs {
+						name
+						value
+						encoding
+					}
+				}
+			`
+		}
+		if( !q ){
+			console.error('no query for NodeEdit');
+		}
+		return q;
 	}
 
-	set = (field, v) => {
-		let dirty = true;
-		let values = this.state.values;
-		values[field.name] = v;
-		this.setState({values,dirty})
+	getNode(){
+		let node = this.state.data.node || {attrs:[]};
+		let mergedNode = Object.assign({}, node);
+		let type = this.state.data.type;
+		if( type ){
+			mergedNode.type = type;
+		}
+		// merge any pending attrs
+		let existingValues = node.attrs.reduce((attrs, attr) => {
+			attrs[attr.name] = attr;
+			return attrs;
+		},{});
+		let pendingValues = this.state.attrs;
+		let mergedValues = Object.assign({}, existingValues, pendingValues);
+		mergedNode.attrs = Object.keys(mergedValues).map(k => mergedValues[k]);
+		// return merged node
+		return mergedNode;
 	}
 
-	_onSave = () => {
-		this.setState({errors:null});
-		console.log('saving ...', this.state.values, this.node);
+	getAttr(node, name){
+		let attr = node.attrs.find(attr => attr.name == name);
+		return attr || {};
+	}
+
+	_setAttr = (attr) => {
+		console.log('_setAttr', attr);
+		if( !attr ){
+			return;
+		}
+		if( !attr.name ){
+			console.error('_setAttr: missing attr.name');
+			return;
+		}
+		if( !attr.value ){
+			console.error('_setAttr: missing attr.name');
+			return;
+		}
+		let attrs = Object.assign({}, this.state.attrs, {
+			[attr.name]: attr
+		});
+		this.setState({attrs})
+	}
+
+	_save = () => {
 		this.store(conn => {
-			return conn.setNode({
-				id: this.node.id,
-				type: this.node.type.name,
-				values: this.state.values,
-			})
-			.then(this._afterSave)
-			.catch((err) => this.setState({errors:[err.toString()]}));
-		})
-	}
-
-	_afterSave = () => {
-		this.setState({dirty: false});
-	}
-
-	fieldItems(){
-		let node = this.node;
-		return node.type.fields.map(f => {
-			return <Card key={`${node.id}__${f.name}`}>
-				<div style={{margin:20}}>
-					<Control ref={f.name} field={f} node={node} value={this.state.values[f.name]} onChange={this.set.bind(this,f)} />
-				</div>
-			</Card>
+			let values = {
+				id: this.isNew() ? uuid.v4() : this.getID(),
+				attrs: Object.keys(this.state.attrs).reduce((attrs,attr) => {
+					attrs.push(attr);
+					return attrs;
+				},[]),
+			};
+			return this.isNew() ?
+				conn.setNode(values) :
+				conn.mergeNode(values);
+		}).then(() => {
+			this.go(`/nodes/${id}`)
 		})
 	}
 
 	render(){
-		return (
-			<div style={{margin:40}}>
-				<div className="md-card-list">
-					{this.fieldItems()}
-					<Card>
-						<div style={{margin:20}}>
-							<FlatButton primary iconBefore={false} label="Save" disabled={!this.state.dirty} onClick={this._onSave} />
-						</div>
-					</Card>
+		if( !this.state.data ){
+			return <CircularProgress />;
+		}
+		let node = this.getNode();
+		return <div>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title={node.name || `New ${node.type.name}`}
+					actionsRight={<div style={{marginLeft:'auto'}}>
+						<IconButton onClick={this._save}>done</IconButton>
+					</div>}
+				/>
+				<div style={{margin:40}}>
+					<div className="md-card-list">
+						{node.type.fields.map(f =>
+							<Card key={f.name}>
+								<div style={{margin:20}}>
+									<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
+								</div>
+							</Card>
+						)}
+					</div>
 				</div>
-			</div>
-		);
+			</Scroll>
+		</div>
 	}
-};
-
-const ContentRow = ({node,onClick}) => {
-	const values = node.attrs.reduce((vs,attr) => {
-		vs[attr.name] = attr.value;
-		return vs;
-	},{})
-	return <TableRow onClick={onClick}>
-		<TableColumn>{node.id}</TableColumn>
-		<TableColumn>{node.type.name}</TableColumn>
-		<TableColumn>{values.name || values.title || 'unnamed'}</TableColumn>
-	</TableRow>;
 }
 
-const ContentPane = ({params,data,location}) => (
-	<div>
-		<DataTable>
-			<TableHeader>
-				<TableRow>
-					<TableColumn>ID</TableColumn>
-					<TableColumn>Type</TableColumn>
-					<TableColumn numeric>Name</TableColumn>
-				</TableRow>
-			</TableHeader>
-			<TableBody>
-				{data.nodes.map(n => <ContentRow key={n.id} node={n} onClick={() => this.go(`/content/${n.id}`)} />)}
-			</TableBody>
-		</DataTable>
-		<FloatingAddButton />
-	</div>
-);
+class NodeListPane extends Component {
+
+	static propTypes = {
+		params: PropTypes.object.isRequired,
+		onToggleSidebar: PropTypes.func,
+	}
+
+	getTypeName(){
+		return this.props.type || this.props.params.name;
+	}
+
+	getQuery(){
+		let typeName = this.getTypeName();
+		if( !typeName ){
+			console.error('no type name')
+			return
+		}
+		return `
+			type(name:"${typeName}"){
+				name
+				fields {
+					name
+				}
+			}
+			nodes(type:${typeName}){
+				id
+				attrs {
+					name
+					value
+				}
+			}
+		`;
+	}
+
+	attr(node,fieldName){
+		let attr = node.attrs.find(attr => attr.name == fieldName);
+		if( !attr ){
+			return
+		}
+		return attr.value;
+	}
+
+	_clickAdd = () => {
+		this.go(`/types/${this.getTypeName()}/nodes/new`)
+	}
+
+	_clickRow = (node) => {
+		this.go(`/nodes/${node.id}`)
+	}
+
+	render(){
+		if( !this.state.data ){
+			return <CircularProgress />
+		}
+		let type = this.state.data.type;
+		let nodes = this.state.data.nodes;
+		return <div>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title={type.name}
+					actionsRight={<div style={{marginLeft:'auto'}}>
+						<IconButton onClick={this._save}>done</IconButton>
+					</div>}
+				/>
+				<DataTable>
+					<TableHeader>
+						<TableRow>
+							<TableColumn>ID</TableColumn>
+							{type.fields.map(f =>
+								<TableColumn ref={f.name}>{f.name}</TableColumn>
+							)}
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{nodes.map(n =>
+							<TableRow ref={n.id} onClick={this._clickRow.bind(this, n)}>
+								<TableColumn>{n.id}</TableColumn>
+								{type.fields.map(f =>
+									<TableColumn ref={f.name}>{this.attr(n,f.name)}</TableColumn>
+								)}
+							</TableRow>
+						)}
+					</TableBody>
+				</DataTable>
+			</Scroll>
+			<FloatingAddButton onClick={this._clickAdd} />
+		</div>;
+	}
+}
 
 const ErrorPane = ({err}) => (
 	<div>Error {err}</div>
@@ -1442,9 +1544,11 @@ const AppRouter = (props) => <Router history={browserHistory}>
 	<Route path="/" {...props} component={Chrome}>
 		<IndexRoute component={Home}/>
 		<Route path="types" component={TypesPane}/>
+		<Route path="types/new" isNew={true} component={TypeEditPane}/>
 		<Route path="types/:name" component={TypeEditPane}/>
-		<Route path="content" component={ContentPane}/>
-		<Route path="content/:id" component={ContentEditPane}/>
+		<Route path="types/:name/nodes" component={NodeListPane}/>
+		<Route path="types/:name/nodes/new" isNew={true} component={NodeEditPane}/>
+		<Route path="nodes/:id" component={NodeEditPane}/>
 	</Route>
 </Router>;
 

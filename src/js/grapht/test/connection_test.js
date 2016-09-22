@@ -228,6 +228,39 @@ test("fetch single type by name", function(t){
 	})
 })
 
+test("type with blank field name should fail", function(t){
+	return admin.setType({
+		name:"Invalid",
+		fields:[
+			{name:"",type:"Text"},
+		]
+	})
+	.then(() => t.fail('expected to fail not succeed!'))
+	.catch((err) => t.ok(err))
+});
+
+test("type with field name with numeric first character should fail", function(t){
+	return admin.setType({
+		name:"Invalid",
+		fields:[
+			{name:"123hello",type:"Text"},
+		]
+	})
+	.then(() => t.fail('expected to fail not succeed!'))
+	.catch((err) => t.ok(err))
+});
+
+test("type with field name with spaces should fail", function(t){
+	return admin.setType({
+		name:"Invalid",
+		fields:[
+			{name:"my bad field",type:"Text"},
+		]
+	})
+	.then(() => t.fail('expected to fail not succeed!'))
+	.catch((err) => t.ok(err))
+});
+
 test("create a Tag type", function(t){
 	return admin.setType({
 		name:"Tag",
@@ -247,10 +280,10 @@ test("create an Author node called alice", function(t){
 	return admin.setNode({
 		id:"alice",
 		type:"Author",
-		values: {
-			name: "alice alison",
-			admin: true,
-		}
+		attrs: [
+			{name: "name", value:"alice alison", enc:"UTF8"},
+			{name: "admin", value:"true", enc:"UTF8"},
+		]
 	},`
 		id
 		type {
@@ -270,10 +303,10 @@ test("create an Author node called alice", function(t){
 test("merge alice node to add age and height values", function(t){
 	return admin.mergeNode({
 		id:"alice",
-		values: {
-			age: 52,
-			height: 1.6,
-		}
+		attrs: [
+			{name: "age", value: "52", enc:"UTF8"},
+			{name: "height", value: "1.6", enc:"UTF8"},
+		]
 	},`
 		...on Author {
 			name
@@ -296,9 +329,9 @@ test("create an Author node called bob", function(t){
 	return admin.setNode({
 		id:"bob",
 		type:"Author",
-		values: {
-			name:"bobby bobbington"
-		}
+		attrs: [
+			{name:"name", value:"bobby bobbington", enc:"UTF8"}
+		]
 	})
 	.then(function(res){
 		return t.same(res, {
@@ -311,10 +344,10 @@ test("create a Post about cheddar", function(t){
 	return admin.setNode({
 		id:"cheddar-post",
 		type:"Post",
-		values: {
-			title: "about cheddar",
-			body: "cheddar comes from the moon",
-		}
+		attrs: [
+			{name:"title", value: "about cheddar", enc:"UTF8"},
+			{name:"body", value: "cheddar comes from the moon", enc:"UTF8"},
+		]
 	},`
 		id
 		type {
@@ -335,10 +368,10 @@ test("create an Post about stilton", function(t){
 	return admin.setNode({
 		id:"stilton-post",
 		type:"Post",
-		values: {
-			title: "about stilton",
-			body: "stilton is the bluest of cheeses",
-		}
+		attrs: [
+			{name:"title", value:"about stilton", enc:"UTF8"},
+			{name:"body", value: "stilton is the bluest of cheeses", enc:"UTF8"},
+		]
 	},`
 		...on Post {
 			title
@@ -398,22 +431,22 @@ test("create a Cheese tag", function(t){
 	return admin.setNode({
 		id:"cheese-tag",
 		type:"Tag",
-		values: {
-			name: "CHEESE",
-		}
+		attrs: [
+			{name:"name", value: "CHEESE", enc:"UTF8"},
+		]
 	},`
 		id
 		attrs {
 			name
 			value
-			encoding
+			enc
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
 			id: "cheese-tag",
 			attrs: [
-				{name:"name", value: "CHEESE", encoding:"string"}
+				{name:"name", value: "CHEESE", enc:"UTF8"}
 			]
 		})
 	})
@@ -552,9 +585,9 @@ test("set image on cheddar-post", function(t){
 	return admin.setNode({
 		id: "cheddar-post",
 		type: "Post",
-		values: {
-			image: IMAGE_DATA
-		}
+		attrs: [
+			{name:"image", value: IMAGE_DATA, enc:"DataURI"}
+		]
 	})
 });
 
@@ -801,9 +834,9 @@ test("subscribed query should update after setNode", function(t){
 					admin.setNode({
 						id: "cheese-tag",
 						type: "Tag",
-						values: {
-							name: "CHEESEY"
-						}
+						attrs: [
+							{name:"name", value: "CHEESEY", enc:"UTF8"}
+						]
 					}).catch(t.threw)
 					break;
 				case 2:
@@ -849,9 +882,9 @@ test("subscription should update on guest.commit", function(t){
 					guest.setNode({
 						id: "cheese-tag",
 						type: "Tag",
-						values: {
-							name: "cheese"
-						}
+						attrs: [
+							{name:"name", value:"cheese", enc:"UTF8"}
+						]
 					}).then(function(){
 						return guest.commit();
 					}).catch(t.threw)
