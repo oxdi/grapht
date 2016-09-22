@@ -733,7 +733,7 @@ const TextAttr = ({node,field,attr,onChange}) => {
 		<TextField
 			label={field.name}
 			value={attr.value}
-			onChange={(v) => onChange({name:field.name,value:v,encoding:'string'})}
+			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})}
 			fullWidth
 			helpText={field.hint}
 		/>
@@ -883,7 +883,7 @@ class NodeEditPane extends Component {
 		if( id == 'new' ){
 			return;
 		}
-		return;
+		return id;
 	}
 
 	getTypeName(){
@@ -908,6 +908,11 @@ class NodeEditPane extends Component {
 			`;
 		}
 		if( !this.isNew() ){
+			let id = this.getID();
+			if( !id ){
+				console.error('NodeEdit requires an id');
+				return;
+			}
 			q += `${q}
 				node(id:"${this.getID()}"){
 					id
@@ -917,7 +922,7 @@ class NodeEditPane extends Component {
 					attrs {
 						name
 						value
-						encoding
+						enc
 					}
 				}
 			`
@@ -930,6 +935,7 @@ class NodeEditPane extends Component {
 
 	getNode(){
 		let node = this.state.data.node || {attrs:[]};
+		console.log('fetched', node);
 		let mergedNode = Object.assign({}, node);
 		let type = this.state.data.type;
 		if( type ){
@@ -953,7 +959,6 @@ class NodeEditPane extends Component {
 	}
 
 	_setAttr = (attr) => {
-		console.log('_setAttr', attr);
 		if( !attr ){
 			return;
 		}
@@ -972,19 +977,25 @@ class NodeEditPane extends Component {
 	}
 
 	_save = () => {
+		let values;
 		this.store(conn => {
-			let values = {
+			values = {
 				id: this.isNew() ? uuid.v4() : this.getID(),
-				attrs: Object.keys(this.state.attrs).reduce((attrs,attr) => {
+				attrs: Object.keys(this.state.attrs).reduce((attrs,k) => {
+					let attr = this.state.attrs[k];
 					attrs.push(attr);
 					return attrs;
 				},[]),
 			};
-			return this.isNew() ?
-				conn.setNode(values) :
-				conn.mergeNode(values);
+			if( this.isNew() ){
+				values.type = this.getTypeName();
+				return conn.setNode(values);
+			} else {
+				return conn.mergeNode(values);
+			}
 		}).then(() => {
-			this.go(`/nodes/${id}`)
+			let node = this.getNode();
+			this.go(`/types/${node.type.name}/nodes`)
 		})
 	}
 
@@ -993,6 +1004,9 @@ class NodeEditPane extends Component {
 			return <CircularProgress />;
 		}
 		let node = this.getNode();
+		if( !node.type ){
+			return <p>no type</p>;
+		}
 		return <div>
 			<Scroll>
 				<Toolbar
@@ -1079,7 +1093,7 @@ class NodeListPane extends Component {
 				<Toolbar
 					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
 					title={type.name}
-					actionsRight={<div style={{marginLeft:'auto'}}>
+					actionsRight={<div ref="right" style={{marginLeft:'auto'}}>
 						<IconButton onClick={this._save}>done</IconButton>
 					</div>}
 				/>
@@ -1188,7 +1202,6 @@ class SelectApp extends Component {
 
 	renderTab(){
 		if( this.state.tab == 0 ){
-			console.log(this.state);
 			return this.renderSelectTab();
 		}
 		return this.renderCreateTab();

@@ -56,10 +56,14 @@ func (g *Graph) Merge(v NodeConfig) *Graph {
 			newNode.t = oldNode.t
 			// ignoer oldAttrs that exist in newAttrs
 			for _, oldAttr := range oldNode.attrs {
+				inNewAttr := false
 				for _, newAttr := range newNode.attrs {
-					if oldAttr.Name != newAttr.Name {
-						newNode.attrs = append(newNode.attrs, oldAttr)
+					if oldAttr.Name == newAttr.Name {
+						inNewAttr = true
 					}
+				}
+				if !inNewAttr {
+					newNode.attrs = append(newNode.attrs, oldAttr)
 				}
 			}
 			g2.nodes = append(g2.nodes, newNode)

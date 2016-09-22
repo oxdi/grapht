@@ -325,6 +325,28 @@ test("merge alice node to add age and height values", function(t){
 	})
 });
 
+test("merge alice empty attrs should not wipe out attrs", function(t){
+	return admin.mergeNode({
+		id:"alice",
+		attrs: []
+	},`
+		...on Author {
+			name
+			age
+			height
+			admin
+		}
+	`)
+	.then(function(res){
+		t.same(res, {
+			name: "alice alison",
+			age: 52,
+			height: 1.6,
+			admin: true,
+		})
+	})
+});
+
 test("create an Author node called bob", function(t){
 	return admin.setNode({
 		id:"bob",
