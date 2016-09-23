@@ -54,6 +54,7 @@ import {
 } from 'react-md/lib/ExpansionPanels';
 import SelectField from 'react-md/lib/SelectFields';
 import Autocomplete from 'react-md/lib/Autocompletes';
+import { FileUpload } from 'react-md/lib/FileInputs';
 
 WebFont.load({
 	google: {
@@ -100,6 +101,17 @@ class Component extends React.Component {
 		mobile: PropTypes.bool.isRequired,
 		tablet: PropTypes.bool.isRequired,
 		desktop: PropTypes.bool.isRequired,
+		setPreviewUrl: PropTypes.func.isRequired,
+	}
+
+	static childContextTypes = {
+		sessionToken: PropTypes.string,
+	}
+
+	getChildContext(){
+		return {
+			sessionToken: this.state.sessionToken,
+		}
 	}
 
 	state = {}
@@ -121,6 +133,14 @@ class Component extends React.Component {
 		// TODO: fix this! react-router is being a PITA
 		if( this.antiRouterHack ){
 			this.unsubscribe().then(() => this.subscribe())
+		}
+	}
+
+	previewUrl(url){
+		let sessionToken = this.state.sessionToken || this.context.sessionToken;
+		if( sessionToken ){
+			this.context.setPreviewUrl(`${url}#${sessionToken}`);
+			return true;
 		}
 	}
 
@@ -174,14 +194,21 @@ class Component extends React.Component {
 		if( this._conn ){
 			return this._conn.catch(this._toast);
 		}
-		this._conn = client.connect({
+		this._conn = client.createSession({
 			userToken: this.context.userToken,
 			appID: this.context.appID,
+		}).then(({sessionToken}) => {
+			this.setState({sessionToken});
+			return client.connectSession({sessionToken});
 		}).then((conn) => {
 			console.log(this.constructor.name, 'connected');
 			window.conns++;
 			return conn;
-		}).catch(this._onError)
+		})
+		this._conn.catch(err => {
+			this._onError(err);
+			this._conn = null;
+		})
 		return this._conn;
 	}
 
@@ -683,7 +710,7 @@ class TypeEditPane extends Component {
 
 	getType(){
 		let existing = this.state.data ? this.state.data.type || {} : {};
-		let modified = ehis.state.type || {};
+		let modified = this.state.type || {};
 		return Object.assign({fields:[]}, existing, modified);
 	}
 
@@ -930,10 +957,11 @@ class ImageAttr extends PureComponent {
 
 
 	render() {
-		let attr = this.props.node.attrs.find(attr => attr.name == field.name) || {};
-		let value = attr || '';
+		const { node, field } = this.props;
+		let attr = node.attrs.find(attr => attr.name == field.name) || {};
+		let value = attr.value || '';
 		let img;
-		if( this.props.value ){
+		if( value && attr.enc == 'DataURI' ){
 			img = <UploadedImageCard url={value} />;
 		}
 
@@ -1095,7 +1123,7 @@ class NodeEditPane extends Component {
 	}
 
 	render(){
-		return <NodeEdit id={this.props.params.id} type={this.props.params.name} />;
+		return <NodeEdit {...this.props} id={this.props.params.id} type={this.props.params.name} />;
 	}
 
 }
@@ -1105,6 +1133,21 @@ class NodeEdit extends Component {
 	static propTypes = {
 		id: PropTypes.string.isRequired,
 		type: PropTypes.string.isRequired,
+	}
+
+	constructor(...args){
+		super(...args);
+		let url = 'http://toolbox.oxdi.eu:3000/product/miniax-xyz-manipulators';
+		this.timer = setInterval(() => {
+			if( this.previewUrl(url) ){
+				clearInterval(this.timer);
+			}
+		},1000);
+	}
+
+	componentWillUnmount(){
+		clearInterval(this.timer);
+		Component.prototype.componentWillUnmount();
 	}
 
 	state = {attrs: {}}
@@ -1151,10 +1194,11 @@ class NodeEdit extends Component {
 	}
 
 	_setAttr = (attr) => {
-		return this.conn().then(conn => conn.mergeNode({
+		return this.conn().then(conn => conn.setNode({
 			id: this.props.id,
 			type: this.props.type,
 			attrs: [attr],
+			merge: true,
 		})).catch(this._onError);
 	}
 
@@ -1195,15 +1239,17 @@ class NodeEdit extends Component {
 						<IconButton onClick={this._save}>done</IconButton>
 					</div>}
 				/>
-				{node.type.fields.map(f =>
-					<Attr ref={f.name}
-						node={node}
-						field={f}
-						onSetAttr={this._setAttr}
-						onSetEdge={this._setEdge}
-						onRemoveEdge={this._removeEdge}
-					/>
-				)}
+				<div style={{margin:12}}>
+					{node.type.fields.map(f =>
+						<Attr ref={f.name}
+							node={node}
+							field={f}
+							onSetAttr={this._setAttr}
+							onSetEdge={this._setEdge}
+							onRemoveEdge={this._removeEdge}
+						/>
+					)}
+				</div>
 			</Scroll>
 		</div>
 	}
@@ -1327,7 +1373,6 @@ class SelectApp extends React.Component {
 
 	fetchApps(){
 		let userToken = this.props.userToken;
-		let sessionToken = this.props.sessionToken;
 		return client.getUser({userToken})
 			.then(this._load)
 			.catch(this._error);
@@ -1352,6 +1397,7 @@ class SelectApp extends React.Component {
 	}
 
 	_select = (id) => {
+		localStorage.setItem('appID', id);
 		this.props.onSelect({id})
 	}
 
@@ -1562,6 +1608,8 @@ class Login extends React.Component {
 
 class App extends React.Component {
 
+	state = {}
+
 	static propTypes = {
 		id: PropTypes.string.isRequired,
 		userToken: PropTypes.string.isRequired,
@@ -1574,6 +1622,7 @@ class App extends React.Component {
 		onError: PropTypes.func.isRequired,
 		userToken: PropTypes.string.isRequired,
 		appID: PropTypes.string.isRequired,
+		setPreviewUrl: PropTypes.func.isRequired,
 	}
 
 	getChildContext(){
@@ -1581,15 +1630,24 @@ class App extends React.Component {
 			onError: this.props.onError,
 			userToken: this.props.userToken,
 			appID: this.props.id,
+			setPreviewUrl: this._previewUrl,
 		};
 	}
 
+	_previewUrl = (url) => {
+		this.setState({url})
+	}
+
 	render(){
+		const preview = this.state.url && <iframe src={this.state.url} frameBorder="0" width="100%" height="100%" style={{border:0,position:'absolute',top:0,left:0,botom:0,right:0}}></iframe>;
 		return <AppLayout
-			sidebar={<AppSidebar
-				onClickClose={this.props.onClickClose}
-				onClickLogout={this.props.onClickLogout} />}
-			preview={<p>preview</p>}
+			sidebar={
+				<AppSidebar
+					onClickClose={this.props.onClickClose}
+					onClickLogout={this.props.onClickLogout}
+				/>
+			}
+			preview={preview}
 		>{this.props.children}</AppLayout>;
 	}
 }
@@ -1742,6 +1800,6 @@ const AppRouter = (props) => <Router history={browserHistory}>
 </Router>;
 
 let localUserToken = localStorage.getItem('userToken');
-let loadAppID = localStorage.getItem('appID');
+let loadAppID = null; //localStorage.getItem('appID');
 render(<AppRouter userToken={localUserToken} appID={loadAppID} />, document.getElementById('app'))
 

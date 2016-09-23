@@ -238,28 +238,6 @@ export default class Connection {
 		});
 	}
 
-	mergeNode(args, returning){
-		var node = args;
-		if( !node.id ){
-			return Promise.reject(new Error('setNode requires id'));
-		}
-		return this.mutation({
-			input: {
-				id: 'String!',
-				attrs: '[AttrArg]'
-			},
-			query: `
-				node:mergeNode(${this.toPlaceholders(node)}) {
-					${returning || 'id'}
-				}
-			`,
-			params: node
-		})
-		.then((data) => {
-			return data.node;
-		});
-	}
-
 	removeNodes(args, returning){
 		if( !returning ){
 			returning = `id`;
