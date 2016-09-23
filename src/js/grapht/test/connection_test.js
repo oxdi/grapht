@@ -301,12 +301,14 @@ test("create an Author node called alice", function(t){
 });
 
 test("merge alice node to add age and height values", function(t){
-	return admin.mergeNode({
+	return admin.setNode({
 		id:"alice",
+		type: "Author",
 		attrs: [
 			{name: "age", value: "52", enc:"UTF8"},
 			{name: "height", value: "1.6", enc:"UTF8"},
-		]
+		],
+		merge: true,
 	},`
 		...on Author {
 			name
@@ -326,9 +328,11 @@ test("merge alice node to add age and height values", function(t){
 });
 
 test("merge alice empty attrs should not wipe out attrs", function(t){
-	return admin.mergeNode({
+	return admin.setNode({
 		id:"alice",
-		attrs: []
+		type: "Author",
+		attrs: [],
+		merge: true,
 	},`
 		...on Author {
 			name
@@ -1096,6 +1100,55 @@ test("friendlyName", function(t){
 			fields: [
 				{friendlyName: "Non techy name"},
 				{friendlyName: "contentB"},
+			]
+		})
+	})
+});
+
+test("unit", function(t){
+	return admin.setType({
+		name:"T",
+		fields:[
+			{name:"contentA",type:"Text", unit:"kg"},
+			{name:"contentB",type:"Text"},
+			{name:"contentC",type:"Text", unit:null},
+		]
+	},`
+		fields {
+			unit
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{unit: "kg"},
+				{unit: null},
+				{unit: null},
+			]
+		})
+	})
+});
+
+test.skip("should be possible to set null node value", function(t){
+	return admin.setNode({
+		id:"T",
+		type:"T",
+		attrs:[
+			{name:"contentA",enc:"UTF8",value:""},
+			{name:"contentB",enc:"UTF8",value:null},
+			{name:"contentC",enc:"UTF8"},
+		]
+	},`
+		attrs {
+			value
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			attrs: [
+				{value: ""},
+				{value: ""},
+				{value: ""},
 			]
 		})
 	})

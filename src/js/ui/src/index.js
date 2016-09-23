@@ -20,6 +20,7 @@ const FIELD_FRAGMENT = `
 	textCharLimit
 	hint
 	friendlyName
+	unit
 `;
 
 import {
@@ -30,6 +31,7 @@ import {
 	FontIcon,
 	Dialog,
 	Avatar,
+	Chip,
 	Toolbar,
 	TextField,
 	Switch,
@@ -51,6 +53,7 @@ import {
 	ExpansionList
 } from 'react-md/lib/ExpansionPanels';
 import SelectField from 'react-md/lib/SelectFields';
+import Autocomplete from 'react-md/lib/Autocompletes';
 
 WebFont.load({
 	google: {
@@ -63,13 +66,16 @@ const FIELD_TYPES = [
 	'Int',
 	'Float',
 	'Boolean',
-	'BcryptText',
+	// 'BcryptText',
 	'HasOne',
 	'HasMany',
 	'DataTable',
 	'File',
 	'Image',
 ];
+
+import UNITS from './units';
+const BASE_UNITS = ['none'].concat(UNITS.sections["SI Base Units"].map(o => o.val));
 
 import {Client} from 'grapht';
 let client = new Client({host:'toolbox.oxdi.eu:8282'});
@@ -111,9 +117,11 @@ class Component extends React.Component {
 		})
 	}
 
-	componentWillReceiveProps(nextProps){
-		this.setState({});
-		this.unsubscribe().then(() => this.subscribe())
+	componentWillReceiveProps(nextProps,nextContext){
+		// TODO: fix this! react-router is being a PITA
+		if( this.antiRouterHack ){
+			this.unsubscribe().then(() => this.subscribe())
+		}
 	}
 
 	isMobile(){
@@ -156,9 +164,10 @@ class Component extends React.Component {
 	}
 
 	store(tx){
-		return this.conn()
-			.then(conn => tx(conn).then(() => conn.commit()))
-			.catch(this._onError)
+		let res = this.conn()
+			.then(conn => tx(conn).then(() => conn.commit()));
+		res.catch(this._onError);
+		return res;
 	}
 
 	conn(){
@@ -217,6 +226,21 @@ class Component extends React.Component {
 	}
 
 
+}
+
+
+const Scroll = (props) => {
+	let style = {
+		position: 'absolute',
+		top:0,
+		left:0,
+		bottom:0,
+		right:0,
+		overflow: 'scroll',
+	};
+	return <div style={style}>
+		{props.children}
+	</div>;
 }
 
 class AppLayout extends Component {
@@ -454,6 +478,17 @@ class FieldExpansionPanel extends React.Component {
 		this.setFieldState({type});
 	}
 
+	_setEdgeName = (edgeName) => {
+		this.setFieldState({edgeName});
+	}
+
+	_setUnit = (unit) => {
+		if( unit == 'none' ){
+			unit = '';
+		}
+		this.setFieldState({unit});
+	}
+
 	_setTextCharLimit = (textCharLimit) => {
 		this.setFieldState({textCharLimit});
 	}
@@ -468,7 +503,7 @@ class FieldExpansionPanel extends React.Component {
 
 	_setMultiline = (on) => {
 		let lines = 5;
-		if( this.props.textLines > def ){
+		if( this.props.textLines > lines ){
 			lines = this.props.textLines;
 		}
 		this.setFieldState({textLines: on ? lines : 0});
@@ -546,15 +581,6 @@ class FieldExpansionPanel extends React.Component {
 						/>
 					</div>
 					<div>
-						<TextField
-							label="API field name"
-							value={field.name}
-							onChange={this._setName}
-							fullWidth
-							helpText="API field names are seen by machines and developers. They should be camelcase without spaces (wheelsOnBus not wheels_on_bus)"
-						/>
-					</div>
-					<div>
 						<SelectField
 							label="Type"
 							value={field.type}
@@ -566,7 +592,36 @@ class FieldExpansionPanel extends React.Component {
 							fullWidth
 						/>
 					</div>
+					{field.type == "HasOne" || field.type == "HasMany" ? <div>
+						<TextField
+							label="Edge Name"
+							value={field.edgeName || ''}
+							onChange={this._setEdgeName}
+							fullWidth
+							helpText="The name of the connection"
+						/>
+					</div> : null}
 					{this.renderOptions(field)}
+					{field.type == "Int" || field.type == "Float" ? <div>
+						<SelectField
+							label="SI Unit"
+							value={field.unit || ''}
+							onChange={this._setUnit}
+							menuItems={BASE_UNITS}
+							adjustMinWidth
+							floatingLabel
+							fullWidth
+						/>
+					</div> : null}
+					<div>
+						<TextField
+							label="API field name"
+							value={field.name}
+							onChange={this._setName}
+							fullWidth
+							helpText="API field names are seen by machines and developers. They should be camelcase without spaces (wheelsOnBus not wheels_on_bus)"
+						/>
+					</div>
 					<div>
 						<Switch
 							label="Field is manditory"
@@ -589,34 +644,23 @@ class FieldExpansionPanel extends React.Component {
 	}
 }
 
-const Scroll = (props) => {
-	let style = {
-		position: 'absolute',
-		top:0,
-		left:0,
-		bottom:0,
-		right:0,
-		overflow: 'scroll',
-	};
-	return <div style={style}>
-		{props.children}
-	</div>;
-}
-
 
 class TypeEditPane extends Component {
 
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
 		onTogglePreview: PropTypes.func,
+		route: PropTypes.object,
 	}
 
 	static title = 'Edit Type';
 
+	antiRouterHack = true;
+
 	state = {}
 
 	isNew(){
-		return this.props.isNew
+		return this.props.route.isNew
 	}
 
 	getQuery(){
@@ -639,7 +683,7 @@ class TypeEditPane extends Component {
 
 	getType(){
 		let existing = this.state.data ? this.state.data.type || {} : {};
-		let modified = this.state.type || {};
+		let modified = ehis.state.type || {};
 		return Object.assign({fields:[]}, existing, modified);
 	}
 
@@ -676,6 +720,8 @@ class TypeEditPane extends Component {
 			return conn.setType(type);
 		}).then(() => {
 			this.go('/types');
+		}).catch(err => {
+			// no op
 		})
 	}
 
@@ -732,6 +778,8 @@ class TypesPane extends Component {
 
 	static title = 'Types'
 
+	antiRouterHack = true;
+
 	getQuery(){
 		return `
 			types {
@@ -779,7 +827,7 @@ class TypesPane extends Component {
 	}
 }
 
-const TextAttr = ({node,field,attr,onChange,type}) => {
+const TextAttr = ({node,field,onSetAttr,type}) => {
 	let opts = {};
 	if( field.textLines > 1 ){
 		opts.rows = field.textLines;
@@ -788,11 +836,12 @@ const TextAttr = ({node,field,attr,onChange,type}) => {
 	if( type ){
 		opts.type = type;
 	}
+	let attr = node.attrs.find(attr => attr.name == field.name) || {};
 	return (
 		<TextField
-			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})}
+			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
 			label={field.friendlyName}
-			value={attr.value}
+			value={attr.value || ''}
 			maxLength={field.textCharLimit}
 			fullWidth
 			helpText={field.hint}
@@ -802,7 +851,8 @@ const TextAttr = ({node,field,attr,onChange,type}) => {
 	)
 }
 
-const BooleanAttr = ({node,field,attr,onChange}) => {
+const BooleanAttr = ({node,field,onSetAttr}) => {
+	let attr = node.attrs.find(attr => attr.name == field.name) || {};
 	let on = false;
        	if( attr ){
 		on = attr.value === true ||
@@ -811,9 +861,9 @@ const BooleanAttr = ({node,field,attr,onChange}) => {
 	}
 	return (
 		<Switch
-			label={field.name}
+			label={field.friendlyName}
 			toggled={on}
-			onChange={(v) => onChange({name:field.name,value:v,enc:'UTF8'})} />
+			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})} />
 	)
 }
 
@@ -847,7 +897,7 @@ class ImageAttr extends PureComponent {
 
 	_onLoad = (file, uploadResult) => {
 		const { name, size, type, lastModifiedDate } = file;
-		this.props.onChange({
+		this.props.onSetAttr({
 			name: this.props.field.name,
 			value: uploadResult,
 			enc: 'DataURI',
@@ -880,7 +930,8 @@ class ImageAttr extends PureComponent {
 
 
 	render() {
-		let value = this.props.attr ? this.props.attr.value : '';
+		let attr = this.props.node.attrs.find(attr => attr.name == field.name) || {};
+		let value = attr || '';
 		let img;
 		if( this.props.value ){
 			img = <UploadedImageCard url={value} />;
@@ -919,7 +970,109 @@ class ImageAttr extends PureComponent {
 	}
 }
 
+
+class EdgeAttr extends Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetEdge: PropTypes.func.isRequired,
+		onRemoveEdge: PropTypes.func.isRequired,
+	}
+
+	getQuery(){
+		return `
+			nodes {
+				id
+			}
+		`
+	}
+
+	_remove = (id) => {
+		const {node, field} = this.props;
+		this.props.onRemoveEdge({
+			from: node.id,
+			to: id,
+			name: field.edgeName,
+		})
+	}
+
+	_add = (id) => {
+		const {node, field} = this.props;
+		this.props.onSetEdge({
+			from: node.id,
+			to: id,
+			name: field.edgeName,
+		})
+	}
+
+	render() {
+		const { data } = this.state;
+		if( !data ){
+			return <CircularProgress />;
+		}
+		const {node, field} = this.props;
+		const ids = node.edges.filter(e => {
+			if( e.name != field.edgeName ){ // ignore other edges
+				return false;
+			}
+			return e.from.id == node.id; // only from us to them ...HasMany / outbound
+		}).map(e => e.to.id);
+		const chips = ids.map(id =>
+			<NodeChip key={id} id={id} onRemove={this._remove} />
+		);
+		return <CSSTransitionGroup
+			transitionName="opacity"
+			transitionEnterTimeout={150}
+			transitionLeaveTimeout={150}
+			component="div"
+			className="chip-list">
+				{chips}
+				<Autocomplete
+					label="Select a node"
+					data={data.nodes}
+					dataLabel="id"
+					onAutocomplete={this._add}
+					clearOnAutocomplete
+					fullWidth
+					deleteKeys="abbreviation"
+				/>
+		</CSSTransitionGroup>;
+	}
+}
+
+export default class NodeChip extends PureComponent {
+	static propTypes = {
+		id: PropTypes.string.isRequired,
+		onRemove: PropTypes.func.isRequired,
+	};
+
+	state = {};
+
+	_remove = () => {
+		this.props.onRemove(this.props.id);
+	};
+
+	render() {
+		return <Chip
+			label={this.props.id}
+			remove={this._remove}
+		>
+			<Avatar random>{this.props.id.charAt(0)}</Avatar>
+		</Chip>;
+	}
+}
+
 class Attr extends React.Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetEdge: PropTypes.func.isRequired,
+		onSetAttr: PropTypes.func.isRequired,
+		onRemoveEdge: PropTypes.func.isRequired,
+	}
+
 	render(){
 		switch( this.props.field.type ){
 		case 'Text':      return <TextAttr {...this.props} />;
@@ -927,7 +1080,8 @@ class Attr extends React.Component {
 		case 'Float':     return <TextAttr {...this.props} type="number" />;
 		case 'Boolean':   return <BooleanAttr {...this.props} />;
 		case 'Image':     return <ImageAttr {...this.props} />;
-		// TODO: HasOne, Collections
+		case 'HasOne':
+		case 'HasMany':   return <EdgeAttr {...this.props} />;
 		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
 		}
 	}
@@ -940,132 +1094,83 @@ class NodeEditPane extends Component {
 		params: PropTypes.object.isRequired,
 	}
 
+	render(){
+		return <NodeEdit id={this.props.params.id} type={this.props.params.name} />;
+	}
+
+}
+
+class NodeEdit extends Component {
+
+	static propTypes = {
+		id: PropTypes.string.isRequired,
+		type: PropTypes.string.isRequired,
+	}
+
 	state = {attrs: {}}
 
-	isNew(){
-		return this.props.route.isNew;
-	}
-
-	getID(){
-		if( this.state.id ){
-			return this.state.id;
-		}
-		let id = this.props.params.id;
-		if( id == 'new' ){
-			return;
-		}
-		return id;
-	}
-
-	getTypeName(){
-		return this.props.params.name;
-	}
+	antiRouterHack = true;
 
 	getQuery(){
-		let q = '';
-		let type = this.getTypeName();
-		let typeFragment = `
-			name
-			fields {
-				${FIELD_FRAGMENT}
-			}
-		`;
-		if( type ){
-			q = `${q}
-				type(name:"${type}"){
-					${typeFragment}
+		const { id, type } = this.props;
+		return `
+			type(name:"${type}"){
+				name
+				fields {
+					${FIELD_FRAGMENT}
 				}
-			`;
-		}
-		if( !this.isNew() ){
-			let id = this.getID();
-			if( !id ){
-				console.error('NodeEdit requires an id');
-				return;
 			}
-			q += `${q}
-				node(id:"${this.getID()}"){
-					id
-					type {
-						${typeFragment}
-					}
-					attrs {
-						name
-						value
-						enc
-					}
+			node(id:"${id}"){
+				id
+				attrs {
+					name
+					value
+					enc
 				}
-			`
-		}
-		if( !q ){
-			console.error('no query for NodeEdit');
-		}
-		return q;
+				edges {
+					to {
+						id
+					}
+					from {
+						id
+					}
+					name
+				}
+			}
+		`
 	}
 
 	getNode(){
-		let node = this.state.data.node || {attrs:[]};
-		let mergedNode = Object.assign({}, node);
-		let type = this.state.data.type;
-		if( type ){
-			mergedNode.type = type;
-		}
-		// merge any pending attrs
-		let existingValues = node.attrs.reduce((attrs, attr) => {
-			attrs[attr.name] = attr;
-			return attrs;
-		},{});
-		let pendingValues = this.state.attrs;
-		let mergedValues = Object.assign({}, existingValues, pendingValues);
-		mergedNode.attrs = Object.keys(mergedValues).map(k => mergedValues[k]);
-		// return merged node
-		return mergedNode;
-	}
-
-	getAttr(node, name){
-		let attr = node.attrs.find(attr => attr.name == name);
-		return attr || {};
+		return Object.assign({
+			id: this.props.id,
+			attrs: [],
+			edges: [],
+		}, this.state.data.node || {}, {
+			type: this.state.data.type,
+		});
 	}
 
 	_setAttr = (attr) => {
-		if( !attr ){
-			return;
-		}
-		if( !attr.name ){
-			console.error('_setAttr: missing attr.name');
-			return;
-		}
-		if( !attr.hasOwnProperty('value') ){
-			console.error('_setAttr: missing attr.value');
-			return;
-		}
-		let attrs = Object.assign({}, this.state.attrs, {
-			[attr.name]: attr
-		});
-		this.setState({attrs})
+		return this.conn().then(conn => conn.mergeNode({
+			id: this.props.id,
+			type: this.props.type,
+			attrs: [attr],
+		})).catch(this._onError);
+	}
+
+	_setEdge = (edge) => {
+		this.conn().then(conn => conn.setEdge(edge));
+	}
+
+	_removeEdge = (matcher) => {
+		this.conn().then(conn => conn.removeEdges(matcher));
 	}
 
 	_save = () => {
-		let values = {
-			id: this.isNew() ? uuid.v4() : this.getID(),
-			attrs: Object.keys(this.state.attrs).reduce((attrs,k) => {
-				let attr = this.state.attrs[k];
-				attrs.push(attr);
-				return attrs;
-			},[]),
-		};
-		// abort without save if no changes
-		if( !this.isNew() && values.attrs.length == 0 ){
-			return this._afterSave();
-		}
-		this.store(conn => {
-			if( this.isNew() ){
-				values.type = this.getTypeName();
-				return conn.setNode(values);
-			} else {
-				return conn.mergeNode(values);
-			}
-		}).then(this._afterSave)
+		return this.conn()
+			.then(conn => conn.commit())
+			.then(this._afterSave)
+			.catch(this._onError);
 	}
 
 	_afterSave = () => {
@@ -1085,13 +1190,19 @@ class NodeEditPane extends Component {
 			<Scroll>
 				<Toolbar
 					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
-					title={node.name || `New ${node.type.name}`}
+					title="Edit"
 					actionsRight={<div style={{marginLeft:'auto'}}>
 						<IconButton onClick={this._save}>done</IconButton>
 					</div>}
 				/>
 				{node.type.fields.map(f =>
-					<Attr ref={f.name} node={node} field={f} attr={this.getAttr(node,f.name)} onChange={this._setAttr} />
+					<Attr ref={f.name}
+						node={node}
+						field={f}
+						onSetAttr={this._setAttr}
+						onSetEdge={this._setEdge}
+						onRemoveEdge={this._removeEdge}
+					/>
 				)}
 			</Scroll>
 		</div>
@@ -1104,6 +1215,8 @@ class NodeListPane extends Component {
 		params: PropTypes.object.isRequired,
 		onToggleSidebar: PropTypes.func,
 	}
+
+	antiRouterHack = true;
 
 	getTypeName(){
 		return this.props.params.name;
@@ -1141,11 +1254,11 @@ class NodeListPane extends Component {
 	}
 
 	_clickAdd = () => {
-		this.go(`/types/${this.getTypeName()}/nodes/new`)
+		this.go(`/types/${this.getTypeName()}/nodes/${uuid.v4()}`)
 	}
 
 	_clickRow = (node) => {
-		this.go(`/nodes/${node.id}`)
+		this.go(`/types/${this.getTypeName()}/nodes/${node.id}`)
 	}
 
 	render(){
@@ -1170,18 +1283,14 @@ class NodeListPane extends Component {
 					<TableHeader>
 						<TableRow>
 							<TableColumn>ID</TableColumn>
-							{type.fields.map(f =>
-								<TableColumn ref={f.name}>{f.name}</TableColumn>
-							)}
+							<TableColumn>Name</TableColumn>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{nodes.map(n =>
 							<TableRow ref={n.id} onClick={this._clickRow.bind(this, n)}>
 								<TableColumn>{n.id}</TableColumn>
-								{type.fields.map(f =>
-									<TableColumn ref={f.name}>{this.attr(n,f.name)}</TableColumn>
-								)}
+								<TableColumn>someval</TableColumn>
 							</TableRow>
 						)}
 					</TableBody>
@@ -1628,8 +1737,7 @@ const AppRouter = (props) => <Router history={browserHistory}>
 		<Route path="types/new" isNew={true} component={TypeEditPane} />
 		<Route path="types/:name" component={TypeEditPane} />
 		<Route path="types/:name/nodes" component={NodeListPane} />
-		<Route path="types/:name/nodes/new" isNew={true} component={NodeEditPane} />
-		<Route path="nodes/:id" component={NodeEditPane} />
+		<Route path="types/:name/nodes/:id" component={NodeEditPane} />
 	</Route>
 </Router>;
 

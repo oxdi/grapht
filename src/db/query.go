@@ -227,9 +227,9 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
-						return nil, castError("value", p.Source, "Attr")
+						return "", nil
 					}
-					return string(attr.Value), nil
+					return attr.Value, nil
 				},
 			},
 			"enc": &graphql.Field{
@@ -272,6 +272,10 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 			"required": &graphql.Field{
 				Type:        graphql.NewNonNull(graphql.Boolean),
 				Description: "is field required",
+			},
+			"unit": &graphql.Field{
+				Type:        graphql.String,
+				Description: "SI unit of field value",
 			},
 			"hint": &graphql.Field{
 				Type:        graphql.String,
@@ -553,11 +557,11 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 						Type: graphql.String,
 					},
 				},
-				Description: "outbound connected nodes",
+				Description: "all edges",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					n, ok := p.Source.(*graph.Node)
 					if !ok {
-						return nil, castError("out", p.Source, "Node")
+						return nil, castError("edges", p.Source, "Node")
 					}
 					if n == nil {
 						return nil, nilSourceError("edges", t.Name)
@@ -812,6 +816,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"required": &graphql.InputObjectFieldConfig{
 							Type: graphql.Boolean,
 						},
+						"unit": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
 						"hint": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
@@ -847,6 +854,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			}{}
 			if err := fill(&args, p.Args); err != nil {
 				return nil, err
+			}
+			if !validIdent.MatchString(args.Name) {
+				return nil, fmt.Errorf("cannot define type '%': not a valid type name")
 			}
 			t := &graph.Type{Name: args.Name}
 			for _, fa := range args.Fields {
@@ -940,7 +950,11 @@ func (cxt *GraphqlContext) GetType() *graphql.Field {
 			if !ok || name == "" {
 				return nil, fmt.Errorf("invalid name arg")
 			}
-			return cxt.conn.g.Type(name), nil
+			t := cxt.conn.g.Type(name)
+			if t == nil {
+				return nil, nil
+			}
+			return t, nil
 		},
 	}
 }
@@ -1056,57 +1070,6 @@ func (cxt *GraphqlContext) RemoveMutation() *graphql.Field {
 		},
 	}
 }
-func (cxt *GraphqlContext) MergeMutation() *graphql.Field {
-	return &graphql.Field{
-		Description: "set node data",
-		Type:        cxt.NodeInterface(),
-		Args: graphql.FieldConfigArgument{
-			"id": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
-			},
-			"attrs": &graphql.ArgumentConfig{
-				Type: graphql.NewList(cxt.AttrInputObject()),
-			},
-		},
-		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			cfg := graph.NodeConfig{}
-			err := fill(&cfg, p.Args)
-			if err != nil {
-				return nil, err
-			}
-			g := cxt.conn.g
-			target := g.Get(cfg.ID)
-			if target == nil {
-				return nil, fmt.Errorf("cannot merge non existant node")
-			}
-			t := target.Type()
-			if t == nil {
-				return nil, fmt.Errorf("type %s is not defined", cfg.Type)
-			}
-			getField := func(name string) *graph.Field {
-				for _, field := range t.Fields {
-					if field.Name == name {
-						return field
-					}
-				}
-				return nil
-			}
-			for _, attr := range cfg.Attrs {
-				f := getField(attr.Name)
-				if f == nil {
-					return nil, fmt.Errorf("cannot set attr %s type %s does not define a field called %s", attr.Name, t.Name, attr.Name)
-				}
-			}
-			g = g.Merge(cfg)
-			n := g.Get(cfg.ID)
-			if n == nil {
-				return nil, fmt.Errorf("failed to create node")
-			}
-			cxt.conn.update(g)
-			return n, nil
-		},
-	}
-}
 
 func (cxt *GraphqlContext) AttrInputObject() *graphql.InputObject {
 	if cxt.attrInputObject != nil {
@@ -1119,7 +1082,7 @@ func (cxt *GraphqlContext) AttrInputObject() *graphql.InputObject {
 				Type: graphql.NewNonNull(graphql.String),
 			},
 			"value": &graphql.InputObjectFieldConfig{
-				Type: graphql.NewNonNull(graphql.String),
+				Type: graphql.String,
 			},
 			"enc": &graphql.InputObjectFieldConfig{
 				Type: graphql.NewNonNull(graphql.String),
@@ -1143,6 +1106,9 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 			"attrs": &graphql.ArgumentConfig{
 				Type: graphql.NewList(cxt.AttrInputObject()),
 			},
+			"merge": &graphql.ArgumentConfig{
+				Type: graphql.Boolean,
+			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			cfg := graph.NodeConfig{}
@@ -1150,10 +1116,13 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 			if err != nil {
 				return nil, err
 			}
+			if !validIdent.MatchString(cfg.Type) {
+				return nil, fmt.Errorf("cannot set node with type '%': not a valid type name")
+			}
 			g := cxt.conn.g
 			t := g.Type(cfg.Type)
 			if t == nil {
-				return nil, fmt.Errorf("type %s is not defined", cfg.Type)
+				return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
 			}
 			getField := func(name string) *graph.Field {
 				for _, field := range t.Fields {
@@ -1164,9 +1133,12 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				return nil
 			}
 			for _, attr := range cfg.Attrs {
+				if !validIdent.MatchString(attr.Name) {
+					return nil, fmt.Errorf("cannot set field: '%s' is not a valid field name", attr.Name)
+				}
 				f := getField(attr.Name)
 				if f == nil {
-					return nil, fmt.Errorf("cannot set attr %s type %s does not define a field called %s", attr.Name, t.Name, attr.Name)
+					return nil, fmt.Errorf("cannot set field: type '%s' does not define a field called '%s'", t.Name, attr.Name)
 				}
 			}
 			g = g.Set(cfg)
@@ -1220,7 +1192,6 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddMutation("setType", cxt.DefineTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetMutation())
-	cxt.AddMutation("mergeNode", cxt.MergeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())
 	cxt.AddMutation("setEdge", cxt.ConnectMutation())
 	cxt.AddMutation("removeEdges", cxt.DisconnectMutation())

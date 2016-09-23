@@ -10,15 +10,16 @@ func stringIn(needle string, haystack []string) bool {
 }
 
 type Attr struct {
-	Name  string
-	Value string
-	Enc   string
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Enc   string `json:"enc"`
 }
 
 type NodeConfig struct {
-	ID    string
-	Type  string
-	Attrs []*Attr
+	ID    string  `json:"id"`
+	Type  string  `json:"type"`
+	Attrs []*Attr `json:"attrs"`
+	Merge bool    `json:"merge"`
 }
 
 type Nodes []*Node

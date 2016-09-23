@@ -148,6 +148,8 @@ export default class Connection {
 				if( !paramType ){
 					if( typeof params[k] == 'string' ){
 						paramType = 'String!';
+					} else if( typeof params[k] == 'boolean' ){
+						paramType = 'Boolean!';
 					} else {
 						throw new Error('invalid param: no paramType given');
 					}

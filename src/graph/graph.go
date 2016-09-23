@@ -27,8 +27,10 @@ func (g *Graph) clone() *Graph {
 func (g *Graph) Set(v NodeConfig) *Graph {
 	g2 := g.clone()
 	g2.nodes = []*node{}
+	var old *node
 	for _, n := range g.nodes {
 		if n.id == v.ID {
+			old = n
 			continue
 		}
 		g2.nodes = append(g2.nodes, n)
@@ -38,43 +40,23 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 		t:     v.Type,
 		attrs: v.Attrs,
 	}
-	g2.nodes = append(g2.nodes, n)
-	return g2
-}
-
-func (g *Graph) Merge(v NodeConfig) *Graph {
-	g2 := g.clone()
-	g2.nodes = []*node{}
-	found := false
-	for _, oldNode := range g.nodes {
-		if oldNode.id == v.ID {
-			newNode := &node{
-				id:    v.ID,
-				attrs: v.Attrs,
-			}
-			// copy fields from old
-			newNode.t = oldNode.t
-			// ignoer oldAttrs that exist in newAttrs
-			for _, oldAttr := range oldNode.attrs {
-				inNewAttr := false
-				for _, newAttr := range newNode.attrs {
-					if oldAttr.Name == newAttr.Name {
-						inNewAttr = true
-					}
-				}
-				if !inNewAttr {
-					newNode.attrs = append(newNode.attrs, oldAttr)
+	if v.Merge && old != nil {
+		inNew := func(name string) bool {
+			for _, newAttr := range n.attrs {
+				if newAttr.Name == name {
+					return true
 				}
 			}
-			g2.nodes = append(g2.nodes, newNode)
-			found = true
-		} else {
-			g2.nodes = append(g2.nodes, oldNode)
+			return false
+		}
+		for _, oldAttr := range old.attrs {
+			if inNew(oldAttr.Name) {
+				continue
+			}
+			n.attrs = append(n.attrs, oldAttr)
 		}
 	}
-	if !found {
-		panic("merge failed no node found")
-	}
+	g2.nodes = append(g2.nodes, n)
 	return g2
 }
 

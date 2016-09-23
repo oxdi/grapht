@@ -9,6 +9,7 @@ type Field struct {
 	FriendlyName string `json:"friendlyName"`
 	Required     bool   `json:"required"`
 	Hint         string `json:"hint"`
+	Unit         string `json:"unit"`
 
 	// Text opts
 	TextMarkup    string `json:"textMarkup"`
