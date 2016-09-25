@@ -3,7 +3,6 @@ import {PureComponent,PropTypes} from 'react';
 import CSSTransitionGroup from 'react-addons-css-transition-group';
 import classnames from 'classnames';
 import { render } from 'react-dom';
-import { Router, Route, Link, browserHistory, IndexRoute } from 'react-router'
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
@@ -90,27 +89,31 @@ const FloatingAddButton = (props) => <FloatingButton
 	{...props}
 >add</FloatingButton>;
 
-window.conns = 0;
 class Component extends React.Component {
 
 	static contextTypes = {
 		userToken: PropTypes.string.isRequired,
 		appID: PropTypes.string.isRequired,
 		onError: PropTypes.func.isRequired,
-		router: PropTypes.object.isRequired,
+		onSetPane: PropTypes.func.isRequired,
 		mobile: PropTypes.bool.isRequired,
 		tablet: PropTypes.bool.isRequired,
 		desktop: PropTypes.bool.isRequired,
-		setPreviewUrl: PropTypes.func.isRequired,
+		conn: PropTypes.object.isRequired,
 	}
 
-	static childContextTypes = {
-		sessionToken: PropTypes.string,
-	}
-
-	getChildContext(){
-		return {
-			sessionToken: this.state.sessionToken,
+	constructor(...args){
+		super(...args);
+		this.__render = this.render;
+		this.render = () => {
+			if( !this.isConnected() ){
+				return <CircularProgress />;
+			}
+			let q = this.getQuery();
+			if( q && !this.state.data ){
+				return <CircularProgress />;
+			}
+			return this.__render();
 		}
 	}
 
@@ -121,26 +124,12 @@ class Component extends React.Component {
 	}
 
 	componentWillUnmount() {
-		this.conn().then(conn => {
-			conn.unsubscribe('main');
-			console.log(this.constructor.name, 'unsubscribed and disconnected')
-			window.conns--;
-			return conn.close();
-		})
-	}
-
-	componentWillReceiveProps(nextProps,nextContext){
-		// TODO: fix this! react-router is being a PITA
-		if( this.antiRouterHack ){
-			this.unsubscribe().then(() => this.subscribe())
-		}
-	}
-
-	previewUrl(url){
-		let sessionToken = this.state.sessionToken || this.context.sessionToken;
-		if( sessionToken ){
-			this.context.setPreviewUrl(`${url}#${sessionToken}`);
-			return true;
+		if( this.context && this.context.userToken ){
+			this.conn().then(conn => {
+				return conn.unsubscribe(this.getQueryName());
+			}).then(() => {
+				console.log(this.getQueryName(), 'unsubscribed')
+			}).catch(this._toast)
 		}
 	}
 
@@ -156,8 +145,16 @@ class Component extends React.Component {
 		return this.context.desktop;
 	}
 
+	getAppID(){
+		return this.context.appID;
+	}
+
 	getQuery(){
 		return;
+	}
+
+	getQueryName(){
+		return this.constructor.name;
 	}
 
 	unsubscribe(){
@@ -166,7 +163,7 @@ class Component extends React.Component {
 		}
 		return this.conn()
 			.then(this._unsubscribe)
-			.catch(this._onError)
+			.catch(this._toast)
 	}
 
 	subscribe(){
@@ -174,84 +171,70 @@ class Component extends React.Component {
 		if( !q ){
 			return Promise.resolve();
 		}
+		console.log(this.context);
 		return this.conn()
 			.then(this._subscribe)
-			.catch(this._onError)
+			.catch(this._toast)
 	}
 
-	go(path, params){
-		this.context.router.push(path);
+	go(name, params){
+		this.context.onSetPane(name, params);
 	}
 
-	store(tx){
-		let res = this.conn()
-			.then(conn => tx(conn).then(() => conn.commit()));
-		res.catch(this._onError);
-		return res;
+	isConnected(){
+		return !!this.context.conn;
 	}
 
 	conn(){
-		if( this._conn ){
-			return this._conn.catch(this._toast);
+		if( !this.isConnected() ){
+			throw new Error('not connected');
 		}
-		this._conn = client.createSession({
-			userToken: this.context.userToken,
-			appID: this.context.appID,
-		}).then(({sessionToken}) => {
-			this.setState({sessionToken});
-			return client.connectSession({sessionToken});
-		}).then((conn) => {
-			console.log(this.constructor.name, 'connected');
-			window.conns++;
-			return conn;
-		})
-		this._conn.catch(err => {
-			this._onError(err);
-			this._conn = null;
-		})
-		return this._conn;
+		return this.context.conn;
+	}
+
+	toast(msg,action){
+		this.context.onError(msg, action);
 	}
 
 	_unsubscribe = (conn) => {
-		return conn.unsubscribe('main')
+		return conn.unsubscribe(this.getQueryName())
 			.then(this._onUnsubscribe)
-			.catch(this._onError)
+			.catch(this._toast)
 	}
 
 	_onUnsubscribe = () => {
-		console.log(this.constructor.name, 'unsubscribed');
+		console.log(this.getQueryName(), 'unsubscribed');
 		this.setState({query:null,data:null});
 	}
 
 
 	_subscribe = (conn) => {
 		let q = this.getQuery();
-		return conn.subscribe('main', q)
+		return conn.subscribe(this.getQueryName(), q)
 			.then(this._onSubscribe)
-			.catch(this._onError)
+			.catch(this._toast)
 	}
 
 	_onSubscribe = (query) => {
 		query.on('data', this._onQueryData);
 		query.on('error', this._onQueryError);
 		this.setState({query})
-		console.log(this.constructor.name, 'subscribed');
+		console.log(this.getQueryName(), 'subscribed');
 
 	}
 
 	_onQueryData = (data) => {
-		console.log(this.constructor.name, 'incoming data', data);
+		console.log(this.getQueryName(), 'incoming data', data);
 		this.setState({data});
 	}
 
 	_onQueryError = (err) => {
-		this._onError(err)
+		this.toast(err)
 	}
 
-	_onError = (err,action) => {
-		this.context.onError(err, action);
+	_toast = (msg,action) => {
+		this.toast(msg, action);
 	}
-
 
 }
 
@@ -274,8 +257,8 @@ class AppLayout extends Component {
 
 	static propTypes = {
 		sidebar: PropTypes.node.isRequired,
-		children: PropTypes.node.isRequired,
-		preview: PropTypes.node,
+		main: PropTypes.node.isRequired,
+		preview: PropTypes.node.isRequired,
 	}
 
 	state = {preview:true}
@@ -402,10 +385,10 @@ class AppLayout extends Component {
 	}
 
 	render(){
-		let main = this.props.children ? React.cloneElement(this.props.children,{
+		let main = React.cloneElement(this.props.main,{
 			onToggleSidebar: this._toggleSidebar,
 			onTogglePreview: this._togglePreview,
-		}) : <div>NO CHILD</div>;
+		});
 		let styles = this.styles();
 		return <div style={styles.container}>
 			<div style={styles.sidebar}>
@@ -437,25 +420,22 @@ class AppSidebar extends Component {
 	}
 
 	_clickLogout = () => {
-		this.props.onClickLogout()
+		this.props.onClickLogout();
 	}
 
 	_clickClose = () => {
-		this.props.onClickClose()
+		this.props.onClickClose();
 	}
 
 	_clickTypes = () => {
-		this.go('/types')
+		this.go('TYPE_LIST');
 	}
 
 	_clickContent = (type) => {
-		this.go(`/types/${type.name}/nodes`)
+		this.go('NODE_LIST', {type: type.name});
 	}
 
 	render(){
-		if( !this.state.data ){
-			return <CircularProgress />;
-		}
 		return <Scroll>
 			<List>
 				<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={this.state.data.types.map(t =>
@@ -677,27 +657,15 @@ class TypeEditPane extends Component {
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
 		onTogglePreview: PropTypes.func,
-		route: PropTypes.object,
+		name: PropTypes.string.isRequired,
 	}
 
 	static title = 'Edit Type';
 
-	antiRouterHack = true;
-
 	state = {}
 
-	isNew(){
-		return this.props.route.isNew
-	}
-
 	getQuery(){
-		if( this.isNew() ){
-			return;
-		}
-		let name = this.props.params.name;
-		if( !name || name == 'new' ){
-			return
-		}
+		let name = this.props.name;
 		return `
 			type(name:"${name}"){
 				name
@@ -740,16 +708,14 @@ class TypeEditPane extends Component {
 		this.setState({type});
 	}
 
-	_save = () => {
+	_done = () => {
 		let type = this.getType();
-		this.store(conn => {
+		this.conn(conn => {
 			console.log('setType', type);
 			return conn.setType(type);
 		}).then(() => {
-			this.go('/types');
-		}).catch(err => {
-			// no op
-		})
+			this.go('TYPE_LIST');
+		}).catch(this._toast)
 	}
 
 	_setName = (name) => {
@@ -761,9 +727,6 @@ class TypeEditPane extends Component {
 	}
 
 	render(){
-		if( !this.isNew() && !this.state.data ){
-			return <CircularProgress />;
-		}
 		let type = this.getType();
 		return (
 			<div style={{margin:40}}>
@@ -772,12 +735,11 @@ class TypeEditPane extends Component {
 						actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
 						title="Edit Type"
 						actionsRight={<div style={{marginLeft:'auto'}}>
-							<IconButton onClick={this._save}>done</IconButton>
+							<IconButton onClick={this._done}>done</IconButton>
 						</div>}
 					/>
 					<div>
 						<TextField
-							ref="name"
 							label="Name"
 							block
 							value={type.name}
@@ -801,11 +763,9 @@ class TypeEditPane extends Component {
 	}
 }
 
-class TypesPane extends Component {
+class TypeListPane extends Component {
 
 	static title = 'Types'
-
-	antiRouterHack = true;
 
 	getQuery(){
 		return `
@@ -820,7 +780,13 @@ class TypesPane extends Component {
 	}
 
 	_clickAdd = () => {
-		this.go('/types/new');
+		this.conn().then(conn => {
+			return conn.setType({
+				name: 'NewType'
+			})
+		}).then(type => {
+			this.go('TYPE_EDIT', {name: type.name});
+		}).catch(this._toast)
 	}
 
 	typeItem(t){
@@ -829,15 +795,12 @@ class TypesPane extends Component {
 			leftIcon={<FontIcon>assignment</FontIcon>}
 			primaryText={t.name}
 			secondaryText="Custom Type"
-			onClick={() => this.go(`/types/${t.name}`)}
+			onClick={() => this.go('TYPE_EDIT', {type:t.name})}
 		/>
 	}
 
 
 	render(){
-		if( !this.state.data ){
-			return <CircularProgress />;
-		}
 		let data = this.state.data;
 		return <div>
 			<Scroll>
@@ -1036,9 +999,6 @@ class EdgeAttr extends Component {
 
 	render() {
 		const { data } = this.state;
-		if( !data ){
-			return <CircularProgress />;
-		}
 		const {node, field} = this.props;
 		const ids = node.edges.filter(e => {
 			if( e.name != field.edgeName ){ // ignore other edges
@@ -1118,53 +1078,22 @@ class Attr extends React.Component {
 class NodeEditPane extends Component {
 
 	static propTypes = {
-		route: PropTypes.object.isRequired,
-		params: PropTypes.object.isRequired,
-	}
-
-	render(){
-		return <NodeEdit {...this.props} id={this.props.params.id} type={this.props.params.name} />;
-	}
-
-}
-
-class NodeEdit extends Component {
-
-	static propTypes = {
 		id: PropTypes.string.isRequired,
-		type: PropTypes.string.isRequired,
-	}
-
-	constructor(...args){
-		super(...args);
-		let url = 'http://toolbox.oxdi.eu:3000/product/miniax-xyz-manipulators';
-		this.timer = setInterval(() => {
-			if( this.previewUrl(url) ){
-				clearInterval(this.timer);
-			}
-		},1000);
-	}
-
-	componentWillUnmount(){
-		clearInterval(this.timer);
-		Component.prototype.componentWillUnmount();
 	}
 
 	state = {attrs: {}}
 
-	antiRouterHack = true;
-
 	getQuery(){
-		const { id, type } = this.props;
+		const { id } = this.props;
 		return `
-			type(name:"${type}"){
-				name
-				fields {
-					${FIELD_FRAGMENT}
-				}
-			}
 			node(id:"${id}"){
 				id
+				type {
+					name
+					fields {
+						${FIELD_FRAGMENT}
+					}
+				}
 				attrs {
 					name
 					value
@@ -1183,71 +1112,55 @@ class NodeEdit extends Component {
 		`
 	}
 
-	getNode(){
-		return Object.assign({
-			id: this.props.id,
-			attrs: [],
-			edges: [],
-		}, this.state.data.node || {}, {
-			type: this.state.data.type,
-		});
-	}
-
 	_setAttr = (attr) => {
+		const { node } = this.state.data;
 		return this.conn().then(conn => conn.setNode({
-			id: this.props.id,
-			type: this.props.type,
+			id: node.id,
+			type: node.type.name,
 			attrs: [attr],
 			merge: true,
-		})).catch(this._onError);
+		})).catch(this._toast);
 	}
 
 	_setEdge = (edge) => {
-		this.conn().then(conn => conn.setEdge(edge));
+		this.conn()
+			.then(conn => conn.setEdge(edge))
+			.catch(this._toast);
 	}
 
 	_removeEdge = (matcher) => {
-		this.conn().then(conn => conn.removeEdges(matcher));
+		this.conn()
+			.then(conn => conn.removeEdges(matcher))
+			.catch(this._toast);
 	}
 
-	_save = () => {
-		return this.conn()
-			.then(conn => conn.commit())
-			.then(this._afterSave)
-			.catch(this._onError);
-	}
-
-	_afterSave = () => {
-		let node = this.getNode();
-		this.go(`/types/${node.type.name}/nodes`)
+	_done = () => {
+		const { node } = this.state.data;
+		this.go('NODE_LIST', {type:node.type.name})
 	}
 
 	render(){
-		if( !this.state.data ){
-			return <CircularProgress />;
-		}
-		let node = this.getNode();
-		if( !node.type ){
-			return <p>no type</p>;
-		}
+		const { node } = this.state.data;
 		return <div>
 			<Scroll>
 				<Toolbar
 					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
 					title="Edit"
 					actionsRight={<div style={{marginLeft:'auto'}}>
-						<IconButton onClick={this._save}>done</IconButton>
+						<IconButton onClick={this._done}>done</IconButton>
 					</div>}
 				/>
 				<div style={{margin:12}}>
 					{node.type.fields.map(f =>
-						<Attr ref={f.name}
-							node={node}
-							field={f}
-							onSetAttr={this._setAttr}
-							onSetEdge={this._setEdge}
-							onRemoveEdge={this._removeEdge}
-						/>
+						<div key={f.name} style={{marginTop:18,marginBottom:18}}>
+							<Attr
+								node={node}
+								field={f}
+								onSetAttr={this._setAttr}
+								onSetEdge={this._setEdge}
+								onRemoveEdge={this._removeEdge}
+							/>
+						</div>
 					)}
 				</div>
 			</Scroll>
@@ -1258,30 +1171,20 @@ class NodeEdit extends Component {
 class NodeListPane extends Component {
 
 	static propTypes = {
-		params: PropTypes.object.isRequired,
 		onToggleSidebar: PropTypes.func,
-	}
-
-	antiRouterHack = true;
-
-	getTypeName(){
-		return this.props.params.name;
+		type: PropTypes.string.isRequired,
 	}
 
 	getQuery(){
-		let typeName = this.getTypeName();
-		if( !typeName ){
-			console.error('no type name')
-			return
-		}
+		const {type} = this.props;
 		return `
-			type(name:"${typeName}"){
+			type(name:"${type}"){
 				name
 				fields {
 					name
 				}
 			}
-			nodes(type:${typeName}){
+			nodes(type:${type}){
 				id
 				attrs {
 					name
@@ -1300,17 +1203,21 @@ class NodeListPane extends Component {
 	}
 
 	_clickAdd = () => {
-		this.go(`/types/${this.getTypeName()}/nodes/${uuid.v4()}`)
+		this.conn().then(conn => {
+			return conn.setNode({
+				id: uuid.v4(),
+				type: this.props.type,
+			})
+		}).then((node) => {
+			this.go('NODE_EDIT', {id: node.id});
+		}).catch(this._toast)
 	}
 
 	_clickRow = (node) => {
-		this.go(`/types/${this.getTypeName()}/nodes/${node.id}`)
+		this.go('NODE_EDIT',{id:node.id});
 	}
 
 	render(){
-		if( !this.state.data ){
-			return <CircularProgress />
-		}
 		if( !this.state.data.type ){
 			return <div>'waiting on type'</div>;
 		}
@@ -1321,8 +1228,8 @@ class NodeListPane extends Component {
 				<Toolbar
 					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
 					title={type.name}
-					actionsRight={<div ref="right" style={{marginLeft:'auto'}}>
-						<IconButton onClick={this._save}>done</IconButton>
+					actionsRight={<div style={{marginLeft:'auto'}}>
+						<IconButton onClick={this._done}>done</IconButton>
 					</div>}
 				/>
 				<DataTable>
@@ -1334,7 +1241,7 @@ class NodeListPane extends Component {
 					</TableHeader>
 					<TableBody>
 						{nodes.map(n =>
-							<TableRow ref={n.id} onClick={this._clickRow.bind(this, n)}>
+							<TableRow key={n.id} onClick={this._clickRow.bind(this, n)}>
 								<TableColumn>{n.id}</TableColumn>
 								<TableColumn>someval</TableColumn>
 							</TableRow>
@@ -1351,10 +1258,21 @@ const ErrorPane = ({err}) => (
 	<div>Error {err}</div>
 );
 
-const Home = () => (
-	<div>HOMEY</div>
-);
-Home.title = "Home";
+class HomePane extends Component {
+	render(){
+		return <div>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title={this.getAppID()}
+					actionsRight={<div style={{marginLeft:'auto'}}>
+					</div>}
+				/>
+				<p>Hello, Welcome, write some help and stuff here</p>
+			</Scroll>
+		</div>;
+	}
+}
 
 class SelectApp extends React.Component {
 
@@ -1480,6 +1398,8 @@ class Login extends React.Component {
 		onAuthenticated: PropTypes.func,
 		onError: PropTypes.func,
 	}
+
+	state = {tab:0}
 
 	onAuthenticated(userToken){
 		this.props.onAuthenticated(userToken)
@@ -1608,47 +1528,113 @@ class Login extends React.Component {
 
 class App extends React.Component {
 
-	state = {}
+	constructor(...args){
+		super(...args);
+		this.state = {};
+	}
+
+	componentDidMount(){
+		this.startSession();
+	}
 
 	static propTypes = {
 		id: PropTypes.string.isRequired,
+		url: PropTypes.string.isRequired,
 		userToken: PropTypes.string.isRequired,
 		onClickClose: PropTypes.func.isRequired,
 		onClickLogout: PropTypes.func.isRequired,
 		onError: PropTypes.func.isRequired,
+		onSetPane: PropTypes.func.isRequired,
+		pane: PropTypes.string.isRequired,
+		paneProps: PropTypes.object.isRequired,
 	}
 
 	static childContextTypes = {
 		onError: PropTypes.func.isRequired,
+		onSetPane: PropTypes.func.isRequired,
 		userToken: PropTypes.string.isRequired,
 		appID: PropTypes.string.isRequired,
-		setPreviewUrl: PropTypes.func.isRequired,
+		conn: PropTypes.object,
 	}
 
 	getChildContext(){
 		return {
 			onError: this.props.onError,
+			onSetPane: this.props.onSetPane,
 			userToken: this.props.userToken,
 			appID: this.props.id,
-			setPreviewUrl: this._previewUrl,
+			conn: this.state.conn,
 		};
 	}
 
-	_previewUrl = (url) => {
-		this.setState({url})
+	componentWillUnmount(){
+		this.closeSession();
+	}
+
+	startSession(){
+		const {userToken, id} = this.props;
+		const conn = client.createSession({
+			userToken: userToken,
+			appID: id,
+		}).then(({sessionToken}) => {
+			this.setState({sessionToken});
+			return client.connectSession({sessionToken});
+		}).then((conn) => {
+			console.log('connected');
+			return conn;
+		})
+		this.setState({conn});
+	}
+
+	closeSession(){
+		if( this.state.conn ){
+			this.state.conn.close();
+		}
+	}
+
+	renderPreview(){
+		const url = `${this.props.url}#${this.state.sessionToken}`
+		return <iframe src={url}
+			frameBorder="0"
+			width="100%"
+			height="100%"
+			style={{border:0,position:'absolute',top:0,left:0,botom:0,right:0}}
+		></iframe>;
+	}
+
+	renderMain(){
+		const props = {
+			key: this.props.pane,
+			conn: this.state.conn,
+			...this.props.paneProps,
+		};
+		console.log('render:', this.props.pane, props)
+		switch(this.props.pane){
+			case 'TYPE_LIST':    return <TypeListPane {...props} />;
+			case 'TYPE_EDIT':    return <TypeEditPane {...props} />;
+			case 'NODE_LIST':    return <NodeListPane {...props} />;
+			case 'NODE_EDIT':    return <NodeEditPane {...props} />;
+			default:             return <HomePane {...props} />;
+		}
 	}
 
 	render(){
-		const preview = this.state.url && <iframe src={this.state.url} frameBorder="0" width="100%" height="100%" style={{border:0,position:'absolute',top:0,left:0,botom:0,right:0}}></iframe>;
+		const {path, onClickClose, onClickLogout} = this.props;
+		const {conn} = this.state;
+		if( !conn ){
+			return <CircularProgress />;
+		}
 		return <AppLayout
 			sidebar={
 				<AppSidebar
 					onClickClose={this.props.onClickClose}
 					onClickLogout={this.props.onClickLogout}
+					conn={this.state.conn}
 				/>
 			}
-			preview={preview}
-		>{this.props.children}</AppLayout>;
+			main={this.renderMain()}
+			preview={this.renderPreview()}
+		/>;
 	}
 }
 
@@ -1664,11 +1650,13 @@ class Chrome extends React.Component {
 
 	constructor(props,...args){
 		super(props, ...args);
-		this.state = {toasts:[]};
-		if( props.route ){
-			this.state.userToken = props.route.userToken;
-			this.state.appID = props.route.appID;
-		}
+		this.state = {
+			toasts:[],
+			pane: 'HOME',
+			paneProps: {},
+			userToken: this.props.userToken,
+			appID: this.props.appID,
+		};
 	}
 
 	componentWillUnmount() {
@@ -1677,17 +1665,6 @@ class Chrome extends React.Component {
 			this.unlisten = null;
 		}
 	}
-
-	// TODO: do this propperly
-	// This is currently required as I misunderstood how react-router keeps previously
-	// mounted components... the propper way to handle this is to have each Component
-	// perform it's own check rather than re-rendering the entire chrome
-	componentWillReceiveProps(nextProps){
-		if( nextProps.location.pathname != this.props.location.pathname ){
-			this.setState({pathname: nextProps.location.pathname});
-		}
-	}
-
 
 	componentDidMount(){
 		const mq = {
@@ -1715,7 +1692,6 @@ class Chrome extends React.Component {
 		}
 	}
 
-
 	_dismissToast = () => {
 		const toasts = this.state.toasts.slice();
 		toasts.shift();
@@ -1726,10 +1702,10 @@ class Chrome extends React.Component {
 		if( !msg ){
 			return;
 		}
+		console.error(msg, 'toasted');
 		if( msg.message ){
 			msg = msg.message;
 		}
-		console.error('TOAST', msg);
 		const toasts = this.state.toasts.slice();
 		toasts.push({
 			key: Date.now(),
@@ -1749,7 +1725,7 @@ class Chrome extends React.Component {
 	}
 
 	_selectApp = ({id}) => {
-		this.setState({appID: id})
+		this.setState({appID: id});
 	}
 
 	_removeAppID = () => {
@@ -1762,6 +1738,15 @@ class Chrome extends React.Component {
 
 	_authenticated = (userToken) => {
 		this.setState({userToken});
+		localStorage.setItem('userToken', userToken);
+	}
+
+	_setPane = (pane, paneProps) => {
+		console.log('setPane', pane, paneProps);
+		this.setState({
+			pane,
+			paneProps: paneProps || {}
+		});
 	}
 
 	renderMain(){
@@ -1771,9 +1756,17 @@ class Chrome extends React.Component {
 		if( !this.state.appID ){
 			return <SelectApp userToken={this.state.userToken} onSelect={this._selectApp} onCreate={this._createApp} onError={this._toast}/>
 		}
-		return <App id={this.state.appID} userToken={this.state.userToken} onClickClose={this._removeAppID} onClickLogout={this._removeUserToken} onError={this._toast}>
-			{this.props.children}
-		</App>;
+		return <App id={this.state.appID}
+					key={this.state.appID}
+					userToken={this.state.userToken}
+					url="http://toolbox.oxdi.eu:3000/"
+					onClickClose={this._removeAppID}
+					onClickLogout={this._removeUserToken}
+					onError={this._toast}
+					onSetPane={this._setPane}
+					pane={this.state.pane}
+					paneProps={this.state.paneProps}
+		/>;
 	}
 
 	render(){
@@ -1788,18 +1781,7 @@ class Chrome extends React.Component {
 	}
 }
 
-const AppRouter = (props) => <Router history={browserHistory}>
-	<Route path="/" {...props} component={Chrome}>
-		<IndexRoute component={Home} />
-		<Route path="types" component={TypesPane} />
-		<Route path="types/new" isNew={true} component={TypeEditPane} />
-		<Route path="types/:name" component={TypeEditPane} />
-		<Route path="types/:name/nodes" component={NodeListPane} />
-		<Route path="types/:name/nodes/:id" component={NodeEditPane} />
-	</Route>
-</Router>;
-
 let localUserToken = localStorage.getItem('userToken');
-let loadAppID = null; //localStorage.getItem('appID');
-render(<AppRouter userToken={localUserToken} appID={loadAppID} />, document.getElementById('app'))
+let loadAppID = localStorage.getItem('appID');
+render(<Chrome userToken={localUserToken} appID={loadAppID} />, document.getElementById('app'))
 

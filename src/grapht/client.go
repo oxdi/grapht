@@ -17,7 +17,6 @@ func send(ws *websocket.Conn, msg *WireMsg) error {
 		return err
 	}
 	return nil
-
 }
 
 type Client struct {
@@ -67,7 +66,7 @@ func (c *Client) OnMessage(msg *WireMsg) error {
 		go execQuery()
 		return err
 	case "unsubscribe":
-		delete(c.subscriptions, msg.Tag)
+		delete(c.subscriptions, msg.Subscription)
 		return c.Send(&WireMsg{
 			Tag:  msg.Tag,
 			Type: "ok",
