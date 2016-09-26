@@ -3,9 +3,13 @@ var IMAGE_DATA = "image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iA
 // var WebSocket = require('ws');
 var test = require('blue-tape')
 var Grapht = require('../index.js');
+var uuid = require('node-uuid');
 
 var host = "localhost:8282";
 var APP_ID = "jstest";
+var AUTHOR_TYPE_ID = uuid.v1();
+var POST_TYPE_ID = uuid.v1();
+var TAG_TYPE_ID = uuid.v1();
 
 var adminToken;
 
@@ -150,31 +154,31 @@ test("fail to authenticate using invalid pass", function(t){
 
 test("create an Author type", function(t){
 	return admin.setType({
+		id: AUTHOR_TYPE_ID,
 		name:"Author",
 		fields:[
 			{name:"name",type:"Text"},
 			{name:"age",type:"Int"},
 			{name:"height", type:"Float"},
 			{name:"admin", type:"Boolean"},
-			{name:"posts",type:"HasMany",edgeName:"author", edgeToType:"Post"}
 		]
 	}, `
+		id
 		name
 		fields {
 			name
 			type
-			edgeToType
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
+			id: AUTHOR_TYPE_ID,
 			name: "Author",
 			fields: [
-				{name: "name", type:"Text", edgeToType:null},
-				{name: "age", type:"Int", edgeToType:null},
-				{name: "height", type:"Float", edgeToType:null},
-				{name: "admin", type:"Boolean", edgeToType:null},
-				{name: "posts", type:"HasMany", edgeToType:"Post"}
+				{name: "name", type:"Text"},
+				{name: "age", type:"Int"},
+				{name: "height", type:"Float"},
+				{name: "admin", type:"Boolean"},
 			]
 		})
 	})
@@ -182,41 +186,44 @@ test("create an Author type", function(t){
 
 test("create a Post type", function(t){
 	return admin.setType({
+		id: POST_TYPE_ID,
 		name:"Post",
 		fields:[
 			{name:"title",type:"Text"},
 			{name:"image",type:"Image"},
 			{name:"body",type:"Text"},
-			{name:"author", type:"HasOne", edgeName:"author", edgeToType:"Author"},
-			{name:"tags", type:"HasMany", edgeName:"tagged", edgeToType:"Tag"}
+			{name:"author", type:"HasOne", edgeName:"author", edgeToTypeID:AUTHOR_TYPE_ID},
 		]
 	},`
+		id
 		name
 		fields {
 			name
 			type
 			edgeName
-			edgeToType
+			edgeToTypeID
+			edgeToType {
+				name
+			}
 		}
 	`)
 	.then(function(res){
 		return t.same(res, {
+			id: POST_TYPE_ID,
 			name: "Post",
 			fields: [
-				{name: "title", type:"Text", edgeName:null, edgeToType:null},
-				{name: "image", type:"Image", edgeName:null, edgeToType:null},
-				{name: "body", type:"Text", edgeName:null, edgeToType:null},
-				{name: "author", type:"HasOne", edgeName:"author",edgeToType:"Author"},
-				{name: "tags", type:"HasMany", edgeName:"tagged",edgeToType:"Tag"},
-
+				{name: "title", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null},
+				{name: "image", type:"Image", edgeName:null, edgeToType:null, edgeToTypeID:null},
+				{name: "body", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null},
+				{name: "author", type:"HasOne", edgeName:"author",edgeToType:{name:"Author"}, edgeToTypeID: AUTHOR_TYPE_ID},
 			]
 		})
 	})
 });
 
-test("fetch single type by name", function(t){
+test("fetch single type by id", function(t){
 	return admin.query(`
-		type(name:"Post") {
+		type(id:"${POST_TYPE_ID}") {
 			name
 		}
 	`).then(function(res){
@@ -230,6 +237,7 @@ test("fetch single type by name", function(t){
 
 test("type with blank field name should fail", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"Invalid",
 		fields:[
 			{name:"",type:"Text"},
@@ -241,6 +249,7 @@ test("type with blank field name should fail", function(t){
 
 test("type with field name with numeric first character should fail", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"Invalid",
 		fields:[
 			{name:"123hello",type:"Text"},
@@ -252,6 +261,7 @@ test("type with field name with numeric first character should fail", function(t
 
 test("type with field name with spaces should fail", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"Invalid",
 		fields:[
 			{name:"my bad field",type:"Text"},
@@ -263,6 +273,7 @@ test("type with field name with spaces should fail", function(t){
 
 test("create a Tag type", function(t){
 	return admin.setType({
+		id: TAG_TYPE_ID,
 		name:"Tag",
 		fields:[
 			{name:"name",type:"Text"},
@@ -271,7 +282,7 @@ test("create a Tag type", function(t){
 	})
 	.then(function(res){
 		return t.same(res, {
-			name: "Tag",
+			id: TAG_TYPE_ID,
 		})
 	})
 });
@@ -555,9 +566,25 @@ test("list all nodes", function(t){
 	})
 });
 
-test("filter nodes by single type", function(t){
+test("filter nodes by single type type", function(t){
 	return admin.query(`
 		nodes(type:Author) {
+			id
+		}
+	`)
+	.then(function(data){
+		return t.same(data, {
+			nodes: [
+				{id: "alice"},
+				{id: "bob"},
+			]
+		})
+	})
+});
+
+test("filter nodes by single type id", function(t){
+	return admin.query(`
+		nodes(typeID:"${AUTHOR_TYPE_ID}") {
 			id
 		}
 	`)
@@ -941,6 +968,7 @@ test("subscription should update on guest.commit", function(t){
 
 test("textLines", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text",textLines:1},
@@ -969,6 +997,7 @@ test("textLines", function(t){
 
 test("textLineLimit", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"content",type:"Text",textLineLimit:1},
@@ -993,6 +1022,7 @@ test("textLineLimit", function(t){
 
 test("textCharLimit", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text",textCharLimit:3},
@@ -1017,6 +1047,7 @@ test("textCharLimit", function(t){
 
 test("textMarkup", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text",textMarkup:null},
@@ -1041,6 +1072,7 @@ test("textMarkup", function(t){
 
 test("required", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text",required:true},
@@ -1065,6 +1097,7 @@ test("required", function(t){
 
 test("field hint", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"content",type:"Text",hint:"very helpful"},
@@ -1085,6 +1118,7 @@ test("field hint", function(t){
 
 test("friendlyName", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text",friendlyName:"Non techy name"},
@@ -1107,6 +1141,7 @@ test("friendlyName", function(t){
 
 test("unit", function(t){
 	return admin.setType({
+		id: uuid.v1(),
 		name:"T",
 		fields:[
 			{name:"contentA",type:"Text", unit:"kg"},

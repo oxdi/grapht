@@ -12,7 +12,7 @@ const FIELD_FRAGMENT = `
 	type
 	required
 	edgeName
-	edgeToType
+	edgeToTypeID
 	textMarkup
 	textLines
 	textLineLimit
@@ -120,16 +120,30 @@ class Component extends React.Component {
 	state = {}
 
 	componentDidMount(){
-		this.subscribe();
+		this.setup();
 	}
 
 	componentWillUnmount() {
-		if( this.context && this.context.userToken ){
-			this.conn().then(conn => {
+		this.teardown();
+	}
+
+	componentWillReceiveProps(nextProps,nextContext){
+		this.teardown().then(() => this.setup());
+	}
+
+	setup(){
+		this.subscribe();
+	}
+
+	teardown(){
+		if( this.context && this.context.userToken && this.state && this.state.query ){
+			return this.conn().then(conn => {
 				return conn.unsubscribe(this.getQueryName());
 			}).then(() => {
 				console.log(this.getQueryName(), 'unsubscribed')
-			}).catch(this._toast)
+			})
+		} else {
+			return Promise.resolve();
 		}
 	}
 
@@ -171,7 +185,6 @@ class Component extends React.Component {
 		if( !q ){
 			return Promise.resolve();
 		}
-		console.log(this.context);
 		return this.conn()
 			.then(this._subscribe)
 			.catch(this._toast)
@@ -414,6 +427,7 @@ class AppSidebar extends Component {
 	getQuery(){
 		return `
 			types {
+				id
 				name
 			}
 		`
@@ -432,7 +446,7 @@ class AppSidebar extends Component {
 	}
 
 	_clickContent = (type) => {
-		this.go('NODE_LIST', {type: type.name});
+		this.go('NODE_LIST', {typeID: type.id});
 	}
 
 	render(){
@@ -657,17 +671,16 @@ class TypeEditPane extends Component {
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
 		onTogglePreview: PropTypes.func,
-		name: PropTypes.string.isRequired,
+		id: PropTypes.string.isRequired,
 	}
-
-	static title = 'Edit Type';
 
 	state = {}
 
 	getQuery(){
-		let name = this.props.name;
+		const { id } = this.props;
 		return `
-			type(name:"${name}"){
+			type(id:"${id}"){
+				id
 				name
 				fields {
 					${FIELD_FRAGMENT}
@@ -676,58 +689,45 @@ class TypeEditPane extends Component {
 		`;
 	}
 
-	getType(){
-		let existing = this.state.data ? this.state.data.type || {} : {};
-		let modified = this.state.type || {};
-		return Object.assign({fields:[]}, existing, modified);
-	}
-
 	_clickAdd = () => {
-		let merged = this.getType();
-		let modified = this.state.type || {};
-		let type = Object.assign({}, modified, {
-			fields: merged.fields.concat({
-				name: `newField${merged.fields.length+1}`,
+		const { type } = this.state.data;
+		this.mergeType({
+			fields: type.fields.concat({
+				name: `newField${type.fields.length+1}`,
 				type: 'Text',
-			}),
-		});
-		this.setState({type});
+			})
+		})
 	}
 
 	_setField = (oldField, newField) => {
-		let merged = this.getType();
-		let modified = this.state.type || {};
-		let type = Object.assign({}, modified, {
-			fields: merged.fields.slice().map(f => {
+		const { type } = this.state.data;
+		this.mergeType({
+			fields: type.fields.slice().map(f => {
 				if( f.name == oldField.name ){
 					return newField;
 				}
 				return f;
 			})
-		});
-		this.setState({type});
-	}
-
-	_done = () => {
-		let type = this.getType();
-		this.conn(conn => {
-			console.log('setType', type);
-			return conn.setType(type);
-		}).then(() => {
-			this.go('TYPE_LIST');
-		}).catch(this._toast)
+		})
 	}
 
 	_setName = (name) => {
-		let modified = this.state.type || {};
-		let type = Object.assign({}, modified, {
-			name: name
-		})
-		this.setState({type});
+		this.mergeType({name});
+	}
+
+	mergeType(changes){
+		const { type } = this.state.data;
+		this.conn().then(conn => {
+			return conn.setType(Object.assign({}, type, changes))
+		}).catch(this._toast);
+	}
+
+	_done = () => {
+		this.go('TYPE_LIST');
 	}
 
 	render(){
-		let type = this.getType();
+		const { type } = this.state.data;
 		return (
 			<div style={{margin:40}}>
 				<Scroll>
@@ -770,6 +770,7 @@ class TypeListPane extends Component {
 	getQuery(){
 		return `
 			types {
+				id
 				name
 				fields {
 					name
@@ -782,10 +783,11 @@ class TypeListPane extends Component {
 	_clickAdd = () => {
 		this.conn().then(conn => {
 			return conn.setType({
-				name: 'NewType'
+				id: uuid.v4(),
+				name: `NewType`
 			})
 		}).then(type => {
-			this.go('TYPE_EDIT', {name: type.name});
+			this.go('TYPE_EDIT', {id: type.id});
 		}).catch(this._toast)
 	}
 
@@ -795,7 +797,7 @@ class TypeListPane extends Component {
 			leftIcon={<FontIcon>assignment</FontIcon>}
 			primaryText={t.name}
 			secondaryText="Custom Type"
-			onClick={() => this.go('TYPE_EDIT', {type:t.name})}
+			onClick={() => this.go('TYPE_EDIT', {id:t.id})}
 		/>
 	}
 
@@ -1089,6 +1091,7 @@ class NodeEditPane extends Component {
 			node(id:"${id}"){
 				id
 				type {
+					id
 					name
 					fields {
 						${FIELD_FRAGMENT}
@@ -1136,7 +1139,7 @@ class NodeEditPane extends Component {
 
 	_done = () => {
 		const { node } = this.state.data;
-		this.go('NODE_LIST', {type:node.type.name})
+		this.go('NODE_LIST', {typeID:node.type.id})
 	}
 
 	render(){
@@ -1172,19 +1175,19 @@ class NodeListPane extends Component {
 
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
-		type: PropTypes.string.isRequired,
+		typeID: PropTypes.string.isRequired,
 	}
 
 	getQuery(){
-		const {type} = this.props;
+		const {typeID} = this.props;
 		return `
-			type(name:"${type}"){
+			type(id:"${typeID}"){
 				name
 				fields {
 					name
 				}
 			}
-			nodes(type:${type}){
+			nodes(typeID:"${typeID}"){
 				id
 				attrs {
 					name
@@ -1206,7 +1209,7 @@ class NodeListPane extends Component {
 		this.conn().then(conn => {
 			return conn.setNode({
 				id: uuid.v4(),
-				type: this.props.type,
+				typeID: this.props.typeID,
 			})
 		}).then((node) => {
 			this.go('NODE_EDIT', {id: node.id});
@@ -1544,6 +1547,7 @@ class App extends React.Component {
 		onClickClose: PropTypes.func.isRequired,
 		onClickLogout: PropTypes.func.isRequired,
 		onError: PropTypes.func.isRequired,
+		onDismissError: PropTypes.func.isRequired,
 		onSetPane: PropTypes.func.isRequired,
 		pane: PropTypes.string.isRequired,
 		paneProps: PropTypes.object.isRequired,
@@ -1581,6 +1585,9 @@ class App extends React.Component {
 			return client.connectSession({sessionToken});
 		}).then((conn) => {
 			console.log('connected');
+			conn.onDirty = this._showDirtyToast;
+			conn.onClean = this._hideDirtyToast;
+			conn.onClose = this._showOfflineToast;
 			return conn;
 		})
 		this.setState({conn});
@@ -1590,6 +1597,36 @@ class App extends React.Component {
 		if( this.state.conn ){
 			this.state.conn.close();
 		}
+	}
+
+	_showDirtyToast = () => {
+		this.props.onError('You have unpublished changes', {
+			label: 'Publish',
+			secondary: true,
+			onClick: () => {
+				this.state.conn.then(conn => {
+					return conn.commit().catch(err => {
+						this.props.onError(err);
+						if( conn.dirty ){
+							this._showDirtyToast();
+						}
+					})
+				})
+			}
+		});
+	}
+
+	_hideDirtyToast = () => {
+		this.props.onDismissError();
+	}
+
+	_showOfflineToast = () => {
+		this.props.onError('You are offline', {
+			label: 'Reconnect',
+			onClick: () => {
+				window.location.reload();
+			}
+		});
 	}
 
 	renderPreview(){
@@ -1698,13 +1735,18 @@ class Chrome extends React.Component {
 		this.setState({ toasts });
 	}
 
-	_toast = (msg, action) => {
-		if( !msg ){
+	_toast = (err, action) => {
+		if( !err ){
 			return;
 		}
-		console.error(msg, 'toasted');
+		let msg = err;
 		if( msg.message ){
 			msg = msg.message;
+		}
+		for(let t of this.state.toasts){
+			if( msg == t.text ){
+				return;
+			}
 		}
 		const toasts = this.state.toasts.slice();
 		toasts.push({
@@ -1712,7 +1754,9 @@ class Chrome extends React.Component {
 			text: msg,
 			action,
 		});
-		this.setState({toasts});
+		const autohide = !action;
+		this.setState({toasts, autohide});
+		console.error('toast:', err);
 	}
 
 	_createApp = ({id}) => {
@@ -1763,6 +1807,7 @@ class Chrome extends React.Component {
 					onClickClose={this._removeAppID}
 					onClickLogout={this._removeUserToken}
 					onError={this._toast}
+					onDismissError={this._dismissToast}
 					onSetPane={this._setPane}
 					pane={this.state.pane}
 					paneProps={this.state.paneProps}
@@ -1775,7 +1820,7 @@ class Chrome extends React.Component {
 			<Snackbar
 				toasts={this.state.toasts}
 				dismiss={this._dismissToast}
-				autohide={true}
+				autohide={this.state.autohide}
 			/>
 		</div>;
 	}

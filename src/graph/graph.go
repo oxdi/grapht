@@ -36,9 +36,9 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 		g2.nodes = append(g2.nodes, n)
 	}
 	n := &node{
-		id:    v.ID,
-		t:     v.Type,
-		attrs: v.Attrs,
+		id:     v.ID,
+		typeID: v.TypeID,
+		attrs:  v.Attrs,
 	}
 	if v.Merge && old != nil {
 		inNew := func(name string) bool {
@@ -147,8 +147,8 @@ func (g *Graph) Get(id string) *Node {
 }
 
 func (g *Graph) DefineType(t Type) *Graph {
-	if t.Name == "" {
-		panic("cannot create type with blank name")
+	if t.ID == "" {
+		panic("type id is required")
 	}
 	for _, f := range t.Fields {
 		if f.Name == "" {
@@ -161,7 +161,7 @@ func (g *Graph) DefineType(t Type) *Graph {
 	g2 := g.clone()
 	g2.types = []*Type{}
 	for _, tt := range g.types {
-		if tt.Name == t.Name {
+		if tt.ID == t.ID {
 			continue
 		}
 		g2.types = append(g2.types, tt)
@@ -170,9 +170,18 @@ func (g *Graph) DefineType(t Type) *Graph {
 	return g2
 }
 
-func (g *Graph) Type(name string) *Type {
+func (g *Graph) TypeByName(name string) *Type {
 	for _, t := range g.types {
 		if t.Name == name {
+			return t
+		}
+	}
+	return nil
+}
+
+func (g *Graph) TypeByID(id string) *Type {
+	for _, t := range g.types {
+		if t.ID == id {
 			return t
 		}
 	}

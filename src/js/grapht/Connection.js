@@ -18,16 +18,16 @@ function log(...args){
 	}
 }
 
+const OFFLINE = new Error('Offline');
+
 export default class Connection {
 
 	constructor(ws){
 		this.socket = () => Promise.resolve(ws);
 		ws.onmessage = this.handleMessage;
 		ws.onclose = () => {
-			this.socket = () => Promise.reject(new Error('socket closed'));
-			if( this.onClose ){
-				this.onClose();
-			}
+			this.socket = () => Promise.reject(OFFLINE);
+			this.onClose();
 		}
 		this.promises = {};
 		this.subscriptions = {};
@@ -190,9 +190,31 @@ export default class Connection {
 		return placeholders.join(', ');
 	}
 
+	markDirty(){
+		this.dirty = true;
+		this.onDirty();
+	}
+
+	markClean(){
+		this.dirty = false;
+		this.onClean();
+	}
+
+	onDirty(){
+		// set by user
+	}
+
+	onClean(){
+		// set by user
+	}
+
+	onClose(){
+		// set by user
+	}
+
 	setType(args, returning){
 		if( !returning ){
-			returning = `name`;
+			returning = `id`;
 		}
 		return this.mutation({
 			input: {
@@ -207,6 +229,7 @@ export default class Connection {
 			params: args
 		})
 		.then((data) => {
+			this.markDirty();
 			return data.type;
 		});
 	}
@@ -214,12 +237,6 @@ export default class Connection {
 	// example setNode({id:"0001", type:"Page", values:{name:"my page"}})
 	setNode(args, returning){
 		var node = args;
-		if( !node.id ){
-			return Promise.reject(new Error('setNode requires id'));
-		}
-		if( !node.type ){
-			return Promise.reject(new Error('setNode requires type'));
-		}
 		return this.mutation({
 			input: {
 				id: 'String!',
@@ -234,6 +251,7 @@ export default class Connection {
 			params: node
 		})
 		.then((data) => {
+			this.markDirty();
 			return data.node;
 		});
 	}
@@ -254,6 +272,7 @@ export default class Connection {
 			params: args
 		})
 		.then((data) => {
+			this.markDirty();
 			return data.node;
 		});
 	}
@@ -280,6 +299,7 @@ export default class Connection {
 			params: args
 		})
 		.then((data) => {
+			this.markDirty();
 			return data.edge;
 		});
 	}
@@ -306,6 +326,7 @@ export default class Connection {
 			params: args
 		})
 		.then((data) => {
+			this.markDirty();
 			return data.edges;
 		});
 	}
@@ -317,6 +338,7 @@ export default class Connection {
 			if( msg.type != 'ok' ){
 				return Promise.reject(new Error('expected ok got:'+JSON.stringify(msg)));
 			}
+			this.markClean();
 		})
 	}
 }

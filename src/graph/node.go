@@ -16,10 +16,10 @@ type Attr struct {
 }
 
 type NodeConfig struct {
-	ID    string  `json:"id"`
-	Type  string  `json:"type"`
-	Attrs []*Attr `json:"attrs"`
-	Merge bool    `json:"merge"`
+	ID     string  `json:"id"`
+	TypeID string  `json:"typeID"`
+	Attrs  []*Attr `json:"attrs"`
+	Merge  bool    `json:"merge"`
 }
 
 type Nodes []*Node
@@ -31,7 +31,7 @@ func (ns Nodes) First() *Node {
 	return ns[0]
 }
 
-func (ns Nodes) FilterType(types ...string) Nodes {
+func (ns Nodes) FilterType(types ...*Type) Nodes {
 	if len(types) == 0 {
 		return ns
 	}
@@ -41,7 +41,7 @@ func (ns Nodes) FilterType(types ...string) Nodes {
 	ns2 := Nodes{}
 	for _, n := range ns {
 		for _, t := range types {
-			if n.n.t == t {
+			if n.Type() == t {
 				ns2 = append(ns2, n)
 				break
 			}
@@ -51,9 +51,9 @@ func (ns Nodes) FilterType(types ...string) Nodes {
 }
 
 type node struct {
-	id    string
-	attrs []*Attr
-	t     string
+	id     string
+	attrs  []*Attr
+	typeID string
 }
 
 type Node struct {
@@ -66,7 +66,7 @@ func (n *Node) ID() string {
 }
 
 func (n *Node) Type() *Type {
-	return n.g.Type(n.n.t)
+	return n.g.TypeByID(n.n.typeID)
 }
 
 func (n *Node) Attr(key string) *Attr {

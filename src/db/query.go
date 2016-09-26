@@ -80,20 +80,24 @@ func (cxt *GraphqlContext) TypeObject() *graphql.Object {
 	cxt.typeDefinitionObject = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Type",
 		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type:        graphql.NewNonNull(graphql.String),
+				Description: "id of type",
+			},
 			"name": &graphql.Field{
 				Type:        graphql.String,
 				Description: "name of type",
 			},
-			"fields": &graphql.Field{
-				Type:        graphql.NewList(cxt.FieldDefinitionObject()),
-				Description: "field descriptions for this type",
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					if t, ok := p.Source.(*graph.Type); ok {
-						return t.Fields, nil
-					}
-					return []interface{}{}, nil
-				},
-			},
+		},
+	})
+	cxt.typeDefinitionObject.AddFieldConfig("fields", &graphql.Field{
+		Type:        graphql.NewList(cxt.FieldDefinitionObject()),
+		Description: "field descriptions for this type",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			if t, ok := p.Source.(*graph.Type); ok {
+				return t.Fields, nil
+			}
+			return []interface{}{}, nil
 		},
 	})
 	return cxt.typeDefinitionObject
@@ -295,18 +299,33 @@ func (cxt *GraphqlContext) FieldDefinitionObject() *graphql.Object {
 					return fd.FriendlyName, nil
 				},
 			},
-			"edgeToType": &graphql.Field{
+			"edgeToTypeID": &graphql.Field{
 				Type:        graphql.String,
+				Description: "id of target Type",
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					fd, ok := p.Source.(*graph.Field)
+					if !ok {
+						return nil, nil
+					}
+					if fd.EdgeToTypeID == "" {
+						return nil, nil
+					}
+					return fd.EdgeToTypeID, nil
+				},
+			},
+			"edgeToType": &graphql.Field{
+				Type:        cxt.TypeObject(),
 				Description: "optional type of target nodes",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					fd, ok := p.Source.(*graph.Field)
 					if !ok {
 						return nil, nil
 					}
-					if fd.EdgeToType == "" {
+					if fd.EdgeToTypeID == "" {
 						return nil, nil
 					}
-					return fd.EdgeToType, nil
+					t := cxt.conn.g.TypeByID(fd.EdgeToTypeID)
+					return t, nil
 				},
 			},
 			"edgeName": &graphql.Field{
@@ -637,16 +656,16 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 	case graph.Image:
 		return cxt.ImageObject()
 	case graph.HasOne:
-		if fd.EdgeToType != "" {
-			t := cxt.conn.g.Type(fd.EdgeToType)
+		if fd.EdgeToTypeID != "" {
+			t := cxt.conn.g.TypeByID(fd.EdgeToTypeID)
 			if t != nil {
 				return cxt.NodeType(t)
 			}
 		}
 		return cxt.NodeInterface()
 	case graph.HasMany:
-		if fd.EdgeToType != "" {
-			t := cxt.conn.g.Type(fd.EdgeToType)
+		if fd.EdgeToTypeID != "" {
+			t := cxt.conn.g.TypeByID(fd.EdgeToTypeID)
 			if t != nil {
 				return graphql.NewList(cxt.NodeType(t))
 			}
@@ -800,6 +819,9 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 		Description: "Create a new type",
 		Type:        cxt.TypeObject(),
 		Args: graphql.FieldConfigArgument{
+			"id": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
+			},
 			"name": &graphql.ArgumentConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
@@ -828,7 +850,7 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 						"edgeName": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
-						"edgeToType": &graphql.InputObjectFieldConfig{
+						"edgeToTypeID": &graphql.InputObjectFieldConfig{
 							Type: graphql.String,
 						},
 						"textMarkup": &graphql.InputObjectFieldConfig{
@@ -849,6 +871,7 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			args := struct {
+				ID     string
 				Name   string
 				Fields []*graph.Field
 			}{}
@@ -858,7 +881,10 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			if !validIdent.MatchString(args.Name) {
 				return nil, fmt.Errorf("cannot define type '%': not a valid type name")
 			}
-			t := &graph.Type{Name: args.Name}
+			t := &graph.Type{
+				ID:   args.ID,
+				Name: args.Name,
+			}
 			for _, fa := range args.Fields {
 				if !validIdent.MatchString(fa.Name) {
 					return nil, fmt.Errorf("'%s' is not a valid name", fa.Name)
@@ -867,7 +893,7 @@ func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
 			}
 			g := cxt.conn.g
 			g = g.DefineType(*t)
-			t = g.Type(args.Name)
+			t = g.TypeByID(args.ID)
 			if t == nil {
 				return nil, fmt.Errorf("failed to create type")
 			}
@@ -889,6 +915,9 @@ func (cxt *GraphqlContext) NodeListField(t *graph.Type) *graphql.Field {
 			"type": &graphql.ArgumentConfig{
 				Type: graphql.NewList(cxt.TypeEnum()),
 			},
+			"typeID": &graphql.ArgumentConfig{
+				Type: graphql.NewList(graphql.String),
+			},
 			"sort": &graphql.ArgumentConfig{
 				Type: graphql.NewList(cxt.FieldNameEnum()),
 			},
@@ -897,14 +926,30 @@ func (cxt *GraphqlContext) NodeListField(t *graph.Type) *graphql.Field {
 		Type:        graphql.NewList(gqlType),
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			args := struct {
-				Type []string
-				Sort []string
+				Type   []string
+				TypeID []string
+				Sort   []string
 			}{}
 			if err := fill(&args, p.Args); err != nil {
 				return nil, err
 			}
 			ns := cxt.conn.g.Nodes()
-			ns = ns.FilterType(args.Type...)
+			ts := []*graph.Type{}
+			for _, typeName := range args.Type {
+				t := cxt.conn.g.TypeByName(typeName)
+				if t == nil {
+					return nil, fmt.Errorf("'%s' is not a valid type name")
+				}
+				ts = append(ts, t)
+			}
+			for _, typeID := range args.TypeID {
+				t := cxt.conn.g.TypeByID(typeID)
+				if t == nil {
+					return nil, fmt.Errorf("'%s' is not a valid type id")
+				}
+				ts = append(ts, t)
+			}
+			ns = ns.FilterType(ts...)
 			// ns = ns.Sort(args.Sort)
 			return ns, nil
 		},
@@ -939,18 +984,18 @@ func (cxt *GraphqlContext) NodeField(t *graph.Type) *graphql.Field {
 func (cxt *GraphqlContext) GetType() *graphql.Field {
 	return &graphql.Field{
 		Args: graphql.FieldConfigArgument{
-			"name": &graphql.ArgumentConfig{
+			"id": &graphql.ArgumentConfig{
 				Type: graphql.NewNonNull(graphql.String),
 			},
 		},
-		Description: "fetch single type by name",
+		Description: "fetch single type by id",
 		Type:        cxt.TypeObject(),
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			name, ok := p.Args["name"].(string)
+			name, ok := p.Args["id"].(string)
 			if !ok || name == "" {
-				return nil, fmt.Errorf("invalid name arg")
+				return nil, fmt.Errorf("invalid id arg")
 			}
-			t := cxt.conn.g.Type(name)
+			t := cxt.conn.g.TypeByID(name)
 			if t == nil {
 				return nil, nil
 			}
@@ -1101,7 +1146,10 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				Type: graphql.NewNonNull(graphql.String),
 			},
 			"type": &graphql.ArgumentConfig{
-				Type: graphql.NewNonNull(graphql.String),
+				Type: graphql.String,
+			},
+			"typeID": &graphql.ArgumentConfig{
+				Type: graphql.String,
 			},
 			"attrs": &graphql.ArgumentConfig{
 				Type: graphql.NewList(cxt.AttrInputObject()),
@@ -1111,18 +1159,29 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 			},
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-			cfg := graph.NodeConfig{}
+			cfg := struct {
+				ID     string        `json:"id"`
+				Type   string        `json:"type"`
+				TypeID string        `json:"typeID"`
+				Attrs  []*graph.Attr `json:"attrs"`
+				Merge  bool          `json:"merge"`
+			}{}
 			err := fill(&cfg, p.Args)
 			if err != nil {
 				return nil, err
 			}
-			if !validIdent.MatchString(cfg.Type) {
-				return nil, fmt.Errorf("cannot set node with type '%': not a valid type name")
-			}
 			g := cxt.conn.g
-			t := g.Type(cfg.Type)
-			if t == nil {
-				return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
+			var t *graph.Type
+			if cfg.Type != "" {
+				t = g.TypeByName(cfg.Type)
+				if t == nil {
+					return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
+				}
+			} else {
+				t = g.TypeByID(cfg.TypeID)
+				if t == nil {
+					return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
+				}
 			}
 			getField := func(name string) *graph.Field {
 				for _, field := range t.Fields {
@@ -1141,7 +1200,12 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 					return nil, fmt.Errorf("cannot set field: type '%s' does not define a field called '%s'", t.Name, attr.Name)
 				}
 			}
-			g = g.Set(cfg)
+			g = g.Set(graph.NodeConfig{
+				ID:     cfg.ID,
+				TypeID: t.ID,
+				Attrs:  cfg.Attrs,
+				Merge:  cfg.Merge,
+			})
 			n := g.Get(cfg.ID)
 			if n == nil {
 				return nil, fmt.Errorf("failed to create node")
