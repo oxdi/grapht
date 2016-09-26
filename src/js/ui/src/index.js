@@ -91,6 +91,10 @@ const FloatingAddButton = (props) => <FloatingButton
 
 class Component extends React.Component {
 
+	static propTypes = {
+		query: PropTypes.string,
+	}
+
 	static contextTypes = {
 		userToken: PropTypes.string.isRequired,
 		appID: PropTypes.string.isRequired,
@@ -109,7 +113,7 @@ class Component extends React.Component {
 			if( !this.isConnected() ){
 				return <CircularProgress />;
 			}
-			let q = this.getQuery();
+			let q = this.props.query;
 			if( q && !this.state.data ){
 				return <CircularProgress />;
 			}
@@ -128,7 +132,10 @@ class Component extends React.Component {
 	}
 
 	componentWillReceiveProps(nextProps,nextContext){
-		this.teardown().then(() => this.setup());
+		if( this.props.query != nextProps.query ){
+			console.log('resub');
+			this.teardown().then(() => this.setup());
+		}
 	}
 
 	setup(){
@@ -136,7 +143,7 @@ class Component extends React.Component {
 	}
 
 	teardown(){
-		if( this.context && this.context.userToken && this.state && this.state.query ){
+		if( this.state && this.state.query ){
 			return this.conn().then(conn => {
 				return conn.unsubscribe(this.getQueryName());
 			}).then(() => {
@@ -163,10 +170,6 @@ class Component extends React.Component {
 		return this.context.appID;
 	}
 
-	getQuery(){
-		return;
-	}
-
 	getQueryName(){
 		return this.constructor.name;
 	}
@@ -181,7 +184,7 @@ class Component extends React.Component {
 	}
 
 	subscribe(){
-		let q = this.getQuery();
+		let q = this.props.query;
 		if( !q ){
 			return Promise.resolve();
 		}
@@ -222,7 +225,7 @@ class Component extends React.Component {
 
 
 	_subscribe = (conn) => {
-		let q = this.getQuery();
+		let q = this.props.query;
 		return conn.subscribe(this.getQueryName(), q)
 			.then(this._onSubscribe)
 			.catch(this._toast)
@@ -422,15 +425,7 @@ class AppSidebar extends Component {
 	static propTypes = {
 		onClickLogout: PropTypes.func.isRequired,
 		onClickClose: PropTypes.func.isRequired,
-	}
-
-	getQuery(){
-		return `
-			types {
-				id
-				name
-			}
-		`
+		query: PropTypes.string.isRequired,
 	}
 
 	_clickLogout = () => {
@@ -671,23 +666,11 @@ class TypeEditPane extends Component {
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
 		onTogglePreview: PropTypes.func,
+		query: PropTypes.string.isRequired,
 		id: PropTypes.string.isRequired,
 	}
 
 	state = {}
-
-	getQuery(){
-		const { id } = this.props;
-		return `
-			type(id:"${id}"){
-				id
-				name
-				fields {
-					${FIELD_FRAGMENT}
-				}
-			}
-		`;
-	}
 
 	_clickAdd = () => {
 		const { type } = this.state.data;
@@ -764,21 +747,6 @@ class TypeEditPane extends Component {
 }
 
 class TypeListPane extends Component {
-
-	static title = 'Types'
-
-	getQuery(){
-		return `
-			types {
-				id
-				name
-				fields {
-					name
-					type
-				}
-			}
-		`
-	}
 
 	_clickAdd = () => {
 		this.conn().then(conn => {
@@ -973,14 +941,6 @@ class EdgeAttr extends Component {
 		onRemoveEdge: PropTypes.func.isRequired,
 	}
 
-	getQuery(){
-		return `
-			nodes {
-				id
-			}
-		`
-	}
-
 	_remove = (id) => {
 		const {node, field} = this.props;
 		this.props.onRemoveEdge({
@@ -1071,7 +1031,11 @@ class Attr extends React.Component {
 		case 'Boolean':   return <BooleanAttr {...this.props} />;
 		case 'Image':     return <ImageAttr {...this.props} />;
 		case 'HasOne':
-		case 'HasMany':   return <EdgeAttr {...this.props} />;
+		case 'HasMany':   return <EdgeAttr {...this.props} query={`
+			nodes {
+				id
+			}
+		`}/>;
 		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
 		}
 	}
@@ -1080,40 +1044,11 @@ class Attr extends React.Component {
 class NodeEditPane extends Component {
 
 	static propTypes = {
+		query: PropTypes.string.isRequired,
 		id: PropTypes.string.isRequired,
 	}
 
 	state = {attrs: {}}
-
-	getQuery(){
-		const { id } = this.props;
-		return `
-			node(id:"${id}"){
-				id
-				type {
-					id
-					name
-					fields {
-						${FIELD_FRAGMENT}
-					}
-				}
-				attrs {
-					name
-					value
-					enc
-				}
-				edges {
-					to {
-						id
-					}
-					from {
-						id
-					}
-					name
-				}
-			}
-		`
-	}
 
 	_setAttr = (attr) => {
 		const { node } = this.state.data;
@@ -1176,25 +1111,7 @@ class NodeListPane extends Component {
 	static propTypes = {
 		onToggleSidebar: PropTypes.func,
 		typeID: PropTypes.string.isRequired,
-	}
-
-	getQuery(){
-		const {typeID} = this.props;
-		return `
-			type(id:"${typeID}"){
-				name
-				fields {
-					name
-				}
-			}
-			nodes(typeID:"${typeID}"){
-				id
-				attrs {
-					name
-					value
-				}
-			}
-		`;
+		query: PropTypes.string.isRequired,
 	}
 
 	attr(node,fieldName){
@@ -1534,6 +1451,9 @@ class App extends React.Component {
 	constructor(...args){
 		super(...args);
 		this.state = {};
+		if( this.props.sessionToken ){
+			this.state.sessionToken = this.props.sessionToken;
+		}
 	}
 
 	componentDidMount(){
@@ -1544,6 +1464,7 @@ class App extends React.Component {
 		id: PropTypes.string.isRequired,
 		url: PropTypes.string.isRequired,
 		userToken: PropTypes.string.isRequired,
+		sessionToken: PropTypes.string,
 		onClickClose: PropTypes.func.isRequired,
 		onClickLogout: PropTypes.func.isRequired,
 		onError: PropTypes.func.isRequired,
@@ -1576,21 +1497,32 @@ class App extends React.Component {
 	}
 
 	startSession(){
-		const {userToken, id} = this.props;
-		const conn = client.createSession({
-			userToken: userToken,
-			appID: id,
-		}).then(({sessionToken}) => {
-			this.setState({sessionToken});
-			return client.connectSession({sessionToken});
-		}).then((conn) => {
-			console.log('connected');
-			conn.onDirty = this._showDirtyToast;
-			conn.onClean = this._hideDirtyToast;
-			conn.onClose = this._showOfflineToast;
-			return conn;
-		})
+		let conn;
+		if( this.props.sessionToken ){
+			conn = client.connect({
+				sessionToken: this.props.sessionToken
+			});
+		} else {
+			const {userToken, id} = this.props;
+			conn = client.createSession({
+				userToken: userToken,
+				appID: id,
+			}).then(({sessionToken}) => {
+				this.setState({sessionToken});
+				localStorage.setItem('sessionToken', sessionToken);
+				return client.connectSession({sessionToken});
+			})
+		}
+		conn.then(this._connected);
 		this.setState({conn});
+	}
+
+	_connected = (conn) => {
+		console.log('connected');
+		conn.onDirty = this._showDirtyToast;
+		conn.onClean = this._hideDirtyToast;
+		conn.onClose = this._showOfflineToast;
+		return conn;
 	}
 
 	closeSession(){
@@ -1625,7 +1557,8 @@ class App extends React.Component {
 			label: 'Reconnect',
 			onClick: () => {
 				window.location.reload();
-			}
+			},
+			important: true,
 		});
 	}
 
@@ -1647,10 +1580,66 @@ class App extends React.Component {
 		};
 		console.log('render:', this.props.pane, props)
 		switch(this.props.pane){
-			case 'TYPE_LIST':    return <TypeListPane {...props} />;
-			case 'TYPE_EDIT':    return <TypeEditPane {...props} />;
-			case 'NODE_LIST':    return <NodeListPane {...props} />;
-			case 'NODE_EDIT':    return <NodeEditPane {...props} />;
+			case 'TYPE_LIST':    return <TypeListPane {...props} query={`
+				types {
+					id
+					name
+					fields {
+						name
+						type
+					}
+				}
+			`}/>;
+			case 'TYPE_EDIT':    return <TypeEditPane {...props} query={`
+				type(id:"${props.id}"){
+					id
+					name
+					fields {
+						${FIELD_FRAGMENT}
+					}
+				}
+			`}/>;
+			case 'NODE_LIST':    return <NodeListPane {...props} query={`
+				type(id:"${props.typeID}"){
+					name
+					fields {
+						name
+					}
+				}
+				nodes(typeID:"${props.typeID}"){
+					id
+					attrs {
+						name
+						value
+					}
+				}
+			`}/>;
+			case 'NODE_EDIT':    return <NodeEditPane {...props} query={`
+				node(id:"${props.id}"){
+					id
+					type {
+						id
+						name
+						fields {
+							${FIELD_FRAGMENT}
+						}
+					}
+					attrs {
+						name
+						value
+						enc
+					}
+					edges {
+						to {
+							id
+						}
+						from {
+							id
+						}
+						name
+					}
+				}
+			`}/>;
 			default:             return <HomePane {...props} />;
 		}
 	}
@@ -1667,6 +1656,12 @@ class App extends React.Component {
 					onClickClose={this.props.onClickClose}
 					onClickLogout={this.props.onClickLogout}
 					conn={this.state.conn}
+					query={`
+						types {
+							id
+							name
+						}
+					`}
 				/>
 			}
 			main={this.renderMain()}
@@ -1693,6 +1688,7 @@ class Chrome extends React.Component {
 			paneProps: {},
 			userToken: this.props.userToken,
 			appID: this.props.appID,
+			sessionToken: this.props.sessionToken,
 		};
 	}
 
@@ -1749,12 +1745,20 @@ class Chrome extends React.Component {
 			}
 		}
 		const toasts = this.state.toasts.slice();
-		toasts.push({
+		if( toasts.length && toasts[0].action.important ){
+			return;
+		}
+		const t = {
 			key: Date.now(),
 			text: msg,
 			action,
-		});
-		const autohide = !action;
+		};
+		if( action && action.important ){
+			toasts.unshift(t);
+		} else {
+			toasts.push(t);
+		}
+		const autohide = !(toasts[0].action && toasts[0].action.onClick);
 		this.setState({toasts, autohide});
 		console.error('toast:', err);
 	}
@@ -1803,6 +1807,7 @@ class Chrome extends React.Component {
 		return <App id={this.state.appID}
 					key={this.state.appID}
 					userToken={this.state.userToken}
+					sessionToken={this.state.sessionToken}
 					url="http://toolbox.oxdi.eu:3000/"
 					onClickClose={this._removeAppID}
 					onClickLogout={this._removeUserToken}
@@ -1828,5 +1833,6 @@ class Chrome extends React.Component {
 
 let localUserToken = localStorage.getItem('userToken');
 let loadAppID = localStorage.getItem('appID');
-render(<Chrome userToken={localUserToken} appID={loadAppID} />, document.getElementById('app'))
+let localSessionToken = localStorage.getItem('sessionToken');
+render(<Chrome userToken={localUserToken} appID={loadAppID} sessionToken={localSessionToken} />, document.getElementById('app'))
 
