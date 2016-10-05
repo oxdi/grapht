@@ -112,6 +112,8 @@ class Component extends React.Component {
 
 	constructor(...args){
 		super(...args);
+		this.uniqueID = `${this.constructor.name}_${Date.now()}`;
+		this.mounted = true;
 		this.__render = this.render;
 		this.render = () => {
 			if( !this.isConnected() ){
@@ -123,39 +125,24 @@ class Component extends React.Component {
 			}
 			return this.__render();
 		}
-		this.uniqueID = `${this.constructor.name}_${Date.now()}`;
 	}
 
 	state = {}
 
 	componentDidMount(){
-		this.setup();
+		this.subscribe(this.props.query);
 	}
 
-	componentWillUnmount() {
-		this.teardown();
+	componentWillUnmount(){
+		console.log(this.getQueryName(), 'unmounting');
+		this.mounted = false;
+		this.unsubscribe();
 	}
 
 	componentWillReceiveProps(nextProps,nextContext){
 		if( this.props.query != nextProps.query ){
 			console.log('resub');
-			this.teardown().then(() => this.setup());
-		}
-	}
-
-	setup(){
-		this.subscribe();
-	}
-
-	teardown(){
-		if( this.state && this.state.query ){
-			return this.conn().then(conn => {
-				return conn.unsubscribe(this.getQueryName());
-			}).then(() => {
-				console.log(this.getQueryName(), 'unsubscribed')
-			})
-		} else {
-			return Promise.resolve();
+			this.unsubscribe().then(() => this.subscribe(nextProps.query));
 		}
 	}
 
@@ -180,7 +167,7 @@ class Component extends React.Component {
 	}
 
 	unsubscribe(){
-		if( !this.state.query ){
+		if( !this.query ){
 			return Promise.resolve();
 		}
 		return this.conn()
@@ -188,8 +175,7 @@ class Component extends React.Component {
 			.catch(this._toast)
 	}
 
-	subscribe(){
-		let q = this.props.query;
+	subscribe(q){
 		if( !q ){
 			return Promise.resolve();
 		}
@@ -228,7 +214,10 @@ class Component extends React.Component {
 
 	_onUnsubscribe = () => {
 		console.log(this.getQueryName(), 'unsubscribed');
-		this.setState({query:null,data:null});
+		this.query = null;
+		if( this.mounted ){
+			this.setState({data:null});
+		}
 	}
 
 
@@ -242,7 +231,7 @@ class Component extends React.Component {
 	_onSubscribe = (query) => {
 		query.on('data', this._onQueryData);
 		query.on('error', this._onQueryError);
-		this.setState({query})
+		this.query = query;
 		console.log(this.getQueryName(), 'subscribed', query.query);
 
 	}
@@ -908,6 +897,7 @@ class ImageAttr extends Component {
 
 	componentWillUnmount() {
 		this._timeout && clearTimeout(this._timeout);
+		Component.prototype.componentWillUnmount.call(this);
 	}
 
 	_onLoad = (file, uploadResult) => {
