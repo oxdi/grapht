@@ -17,6 +17,7 @@ const FIELD_FRAGMENT = `
 		id
 		name
 	}
+	edgeDirection
 	textMarkup
 	textLines
 	textLineLimit
@@ -122,6 +123,7 @@ class Component extends React.Component {
 			}
 			return this.__render();
 		}
+		this.uniqueID = `${this.constructor.name}_${Date.now()}`;
 	}
 
 	state = {}
@@ -174,7 +176,7 @@ class Component extends React.Component {
 	}
 
 	getQueryName(){
-		return this.constructor.name;
+		return this.uniqueID;
 	}
 
 	unsubscribe(){
@@ -505,9 +507,12 @@ class FieldExpansionPanel extends React.Component {
 		this.setFieldState({edgeName});
 	}
 
-	_setEdgeToTypeID = (type) => {
-		console.log('_setEdgeToTypeID', type);
-		this.setFieldState({edgeToTypeID: type.id});
+	_setEdgeDirection = ({value}) => {
+		this.setFieldState({edgeDirection: value});
+	}
+
+	_setEdgeToTypeID = ({id}) => {
+		this.setFieldState({edgeToTypeID: id});
 	}
 
 	_setUnit = (unit) => {
@@ -540,46 +545,6 @@ class FieldExpansionPanel extends React.Component {
 	setFieldState(state){
 		let newField = Object.assign({}, this.props.field, state);
 		this.props.onChange(this.props.field, newField)
-	}
-
-	renderTextOptions(field){
-		let lineLimit = field.textLines > 1 ? <div>
-			<TextField
-				label="Line limt"
-				value={field.textLineLimit}
-				onChange={this._setTextLineLimit}
-				fullWidth
-				helpText="Restrict how many lines of text this field can grow to accomodate"
-				type="number"
-			/>
-		</div> : null;
-		return <div>
-			<div>
-				<Switch
-					label="Multiline"
-					toggled={field.textLines > 1}
-					onChange={this._setMultiline}
-				/>
-			</div>
-			{lineLimit}
-			<div>
-				<TextField
-					label="Character limit"
-					value={field.textCharLimit}
-					onChange={this._setTextCharLimit}
-					fullWidth
-					helpText="Restrict how much text can go into this field. Set to zero for no limit"
-					type="number"
-				/>
-			</div>
-		</div>;
-	}
-
-	renderOptions(field){
-		switch(field.type){
-			case 'Text': return this.renderTextOptions(field);
-			default: return;
-		}
 	}
 
 	render(){
@@ -630,6 +595,20 @@ class FieldExpansionPanel extends React.Component {
 							helpText="The name of the connection"
 						/>
 						<SelectField
+							label="Edge Direction"
+							value={field.edgeDirection || 'Any'}
+							onChange={this._setEdgeDirection}
+							menuItems={[
+								{name:'Any',value:''},
+								{name:'Out',value:'Out'},
+								{name:'In',value:'In'},
+							]}
+							itemLabel="name"
+							adjustMinWidth
+							floatingLabel
+							fullWidth
+						/>
+						<SelectField
 							label="Target Type"
 							value={edgeToType ? edgeToType.name : ''}
 							onChange={this._setEdgeToTypeID}
@@ -640,7 +619,35 @@ class FieldExpansionPanel extends React.Component {
 							fullWidth
 						/>
 					</div> : null}
-					{this.renderOptions(field)}
+					{field.type == "Text" ? <div>
+						<div>
+							<Switch
+								label="Multiline"
+								toggled={field.textLines > 1}
+								onChange={this._setMultiline}
+							/>
+						</div>
+						{field.textLines > 1 ? <div>
+							<TextField
+								label="Line limt"
+								value={field.textLineLimit}
+								onChange={this._setTextLineLimit}
+								fullWidth
+								helpText="Restrict how many lines of text this field can grow to accomodate"
+								type="number"
+							/>
+						</div> : null}
+						<div>
+							<TextField
+								label="Character limit"
+								value={field.textCharLimit}
+								onChange={this._setTextCharLimit}
+								fullWidth
+								helpText="Restrict how much text can go into this field. Set to zero for no limit"
+								type="number"
+							/>
+						</div>
+					</div> : null}
 					{field.type == "Int" || field.type == "Float" ? <div>
 						<SelectField
 							label="SI Unit"
@@ -860,6 +867,14 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 }
 
 class UploadedImageCard extends PureComponent {
+
+	static propTypes = {
+		id: PropTypes.string.isRequired,
+		name: PropTypes.string.isRequired,
+		contentType: PropTypes.string.isRequired,
+		onRemove: PropTypes.func.isRequired,
+	}
+
 	render() {
 		const { id, name, contentType, url, onRemove } = this.props;
 		const title = <CardTitle
@@ -867,8 +882,8 @@ class UploadedImageCard extends PureComponent {
 			subtitle={contentType}
 		/>
 		return <Card>
-			<CardMedia overlay={title}>
-			<IconButton data-name={id} className="close-btn" onClick={onRemove}>close</IconButton>
+			<CardMedia overlay={title} style={{position:'relative'}}>
+				<IconButton style={{position:'absolute',zIndex:99,top:0,right:0,backgroundColor:'black',color:'white'}} onClick={onRemove}>close</IconButton>
 				<img src={url} />
 			</CardMedia>
 		</Card>;
@@ -899,22 +914,17 @@ class ImageAttr extends Component {
 		const { onSetNode, onSetEdge, node, field } = this.props;
 		const { name, size, type, lastModifiedDate } = file;
 		this.conn().then(conn => {
-			return conn.removeEdges({
-				from: node.id,
-				name: field.edgeName,
-			}).then(() => {
-				return conn.setNode({
-					id: uuid.v4(),
-					type: "Image",
-					attrs: [
-						{name: "name", value:name, enc:"UTF8"},
-						{name: "data", value:uploadResult, enc:"DataURI"},
-					]
-				})
+			return conn.setNode({
+				id: uuid.v4(),
+				type: "Image",
+				attrs: [
+					{name: "name", value:name, enc:"UTF8"},
+					{name: "data", value:uploadResult, enc:"DataURI"},
+				]
 			}).then(res => {
 				return conn.setEdge({
-					from: node.id,
-					to: res.id,
+					[field.edgeDirection == 'Out' ? 'from' : 'to']: node.id,
+					[field.edgeDirection == 'Out' ? 'to' : 'from']: res.id,
 					name: field.edgeName,
 				})
 			}).catch(this._toast)
@@ -946,7 +956,11 @@ class ImageAttr extends Component {
 	};
 
 	_remove = (id) => {
-		console.warn('dunno how to remove', id);
+		this.conn().then(conn => {
+			return conn.removeNodes({
+				id: id,
+			}).catch(this._toast)
+		});
 	}
 
 	render() {
@@ -957,7 +971,7 @@ class ImageAttr extends Component {
 				key={c.node.id}
 				url={c.node.data.url}
 				name={c.node.name}
-				onRemove={this._remove}
+				onRemove={() => this._remove(c.node.id)}
 				contentType={c.node.data.contentType} />
 		)
 
@@ -1002,10 +1016,6 @@ class EdgeAttr extends Component {
 		field: PropTypes.object.isRequired,
 		onSetEdge: PropTypes.func.isRequired,
 		onRemoveEdge: PropTypes.func.isRequired,
-	}
-
-	getQueryName() {
-		return `attr_${this.props.field.name}`
 	}
 
 	_remove = (id) => {
