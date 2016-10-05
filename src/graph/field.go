@@ -18,8 +18,9 @@ type Field struct {
 	TextCharLimit int    `json:"textCharLimit"`
 
 	// Edge opts
-	EdgeToTypeID string `json:"edgeToTypeID"`
-	EdgeName     string `json:"edgeName"`
+	EdgeToTypeID  string `json:"edgeToTypeID"`
+	EdgeName      string `json:"edgeName"`
+	EdgeDirection string `json:"edgeDirection"`
 }
 
 type Fields []*Field

@@ -12,14 +12,6 @@ type edge struct {
 
 type Edges []*Edge
 
-func (es Edges) Nodes() Nodes {
-	nodes := Nodes{}
-	for _, e := range es {
-		nodes = append(nodes, e.Node())
-	}
-	return nodes
-}
-
 func (es Edges) First() *Edge {
 	if len(es) == 0 {
 		return nil
@@ -28,16 +20,8 @@ func (es Edges) First() *Edge {
 }
 
 type Edge struct {
-	g  *Graph
-	e  *edge
-	in bool
-}
-
-func (e *Edge) Node() *Node {
-	if e.in {
-		return e.From()
-	}
-	return e.To()
+	g *Graph
+	e *edge
 }
 
 func (e *Edge) To() *Node {

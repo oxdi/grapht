@@ -13,6 +13,10 @@ const FIELD_FRAGMENT = `
 	required
 	edgeName
 	edgeToTypeID
+	edgeToType {
+		id
+		name
+	}
 	textMarkup
 	textLines
 	textLineLimit
@@ -67,8 +71,7 @@ const FIELD_TYPES = [
 	'Float',
 	'Boolean',
 	// 'BcryptText',
-	'HasOne',
-	'HasMany',
+	'Edge',
 	'DataTable',
 	'File',
 	'Image',
@@ -78,7 +81,7 @@ import UNITS from './units';
 const BASE_UNITS = ['none'].concat(UNITS.sections["SI Base Units"].map(o => o.val));
 
 import {Client} from 'grapht';
-let client = new Client({host:'toolbox.oxdi.eu:8282'});
+let client = new Client({host:window.location.host});
 window.graphtClient = client;
 
 const FloatingAddButton = (props) => <FloatingButton
@@ -205,6 +208,9 @@ class Component extends React.Component {
 		if( !this.isConnected() ){
 			throw new Error('not connected');
 		}
+		if( !this.context.conn ){
+			throw new Error('no conn in context');
+		}
 		return this.context.conn;
 	}
 
@@ -235,7 +241,7 @@ class Component extends React.Component {
 		query.on('data', this._onQueryData);
 		query.on('error', this._onQueryError);
 		this.setState({query})
-		console.log(this.getQueryName(), 'subscribed');
+		console.log(this.getQueryName(), 'subscribed', query.query);
 
 	}
 
@@ -464,6 +470,7 @@ class AppSidebar extends Component {
 class FieldExpansionPanel extends React.Component {
 
 	static propTypes = {
+		types: PropTypes.array.isRequired,
 		field: PropTypes.object.isRequired,
 		onChange: PropTypes.func.isRequired,
 	}
@@ -496,6 +503,11 @@ class FieldExpansionPanel extends React.Component {
 
 	_setEdgeName = (edgeName) => {
 		this.setFieldState({edgeName});
+	}
+
+	_setEdgeToTypeID = (type) => {
+		console.log('_setEdgeToTypeID', type);
+		this.setFieldState({edgeToTypeID: type.id});
 	}
 
 	_setUnit = (unit) => {
@@ -571,10 +583,11 @@ class FieldExpansionPanel extends React.Component {
 	}
 
 	render(){
-		let field = this.props.field;
+		const {field, types} = this.props;
 		let labels = this.state.expanded ? {} : {
 			secondaryLabel: [field.type]
 		};
+		const edgeToType = types.find(t => t.id == field.edgeToTypeID);
 		return (
 			<ExpansionPanel
 				saveLabel="done"
@@ -608,13 +621,23 @@ class FieldExpansionPanel extends React.Component {
 							fullWidth
 						/>
 					</div>
-					{field.type == "HasOne" || field.type == "HasMany" ? <div>
+					{field.type == "Edge" ? <div>
 						<TextField
 							label="Edge Name"
 							value={field.edgeName || ''}
 							onChange={this._setEdgeName}
 							fullWidth
 							helpText="The name of the connection"
+						/>
+						<SelectField
+							label="Target Type"
+							value={edgeToType ? edgeToType.name : ''}
+							onChange={this._setEdgeToTypeID}
+							menuItems={[{name:'',id:null}].concat(types)}
+							itemLabel="name"
+							adjustMinWidth
+							floatingLabel
+							fullWidth
 						/>
 					</div> : null}
 					{this.renderOptions(field)}
@@ -687,6 +710,7 @@ class TypeEditPane extends Component {
 		this.mergeType({
 			fields: type.fields.slice().map(f => {
 				if( f.name == oldField.name ){
+					delete newField.edgeToType;
 					return newField;
 				}
 				return f;
@@ -701,7 +725,15 @@ class TypeEditPane extends Component {
 	mergeType(changes){
 		const { type } = this.state.data;
 		this.conn().then(conn => {
-			return conn.setType(Object.assign({}, type, changes))
+			let t = Object.assign({}, type, changes);
+			if( t.fields && t.fields.length > 0 ){
+				t.fields = t.fields.map(f => {
+					let f2 = Object.assign({}, f);
+					delete f2.edgeToType;
+					return f2;
+				})
+			}
+			return conn.setType(t);
 		}).catch(this._toast);
 	}
 
@@ -710,7 +742,7 @@ class TypeEditPane extends Component {
 	}
 
 	render(){
-		const { type } = this.state.data;
+		const { type, types } = this.state.data;
 		return (
 			<div style={{margin:40}}>
 				<Scroll>
@@ -736,7 +768,7 @@ class TypeEditPane extends Component {
 						<Subheader primaryText="Fields" />
 					</List>
 					<ExpansionList>
-						{type.fields.map((f,idx) => <FieldExpansionPanel key={idx} field={f} onChange={this._setField} />)}
+						{type.fields.map((f,idx) => <FieldExpansionPanel types={types} key={idx} field={f} onChange={this._setField} />)}
 					</ExpansionList>
 					<div style={{height:80}}> </div>
 				</Scroll>
@@ -829,22 +861,30 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 
 class UploadedImageCard extends PureComponent {
 	render() {
+		const { id, name, contentType, url, onRemove } = this.props;
 		const title = <CardTitle
-			key="title"
-			title="Image Filename here"
-			subtitle={`Other image info here`}
+			title={name}
+			subtitle={contentType}
 		/>
-
 		return <Card>
 			<CardMedia overlay={title}>
-			<IconButton data-name={name} className="close-btn">close</IconButton>
-				<img src={this.props.url} />
+			<IconButton data-name={id} className="close-btn" onClick={onRemove}>close</IconButton>
+				<img src={url} />
 			</CardMedia>
 		</Card>;
 	}
 }
 
-class ImageAttr extends PureComponent {
+class ImageAttr extends Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetEdge: PropTypes.func.isRequired,
+		onRemoveEdge: PropTypes.func.isRequired,
+		query: PropTypes.string.isRequired,
+	}
+
 	constructor(...args) {
 		super(...args);
 		this.state = {};
@@ -856,11 +896,28 @@ class ImageAttr extends PureComponent {
 	}
 
 	_onLoad = (file, uploadResult) => {
+		const { onSetNode, onSetEdge, node, field } = this.props;
 		const { name, size, type, lastModifiedDate } = file;
-		this.props.onSetAttr({
-			name: this.props.field.name,
-			value: uploadResult,
-			enc: 'DataURI',
+		this.conn().then(conn => {
+			return conn.removeEdges({
+				from: node.id,
+				name: field.edgeName,
+			}).then(() => {
+				return conn.setNode({
+					id: uuid.v4(),
+					type: "Image",
+					attrs: [
+						{name: "name", value:name, enc:"UTF8"},
+						{name: "data", value:uploadResult, enc:"DataURI"},
+					]
+				})
+			}).then(res => {
+				return conn.setEdge({
+					from: node.id,
+					to: res.id,
+					name: field.edgeName,
+				})
+			}).catch(this._toast)
 		});
 
 		this._timeout = setTimeout(() => {
@@ -888,15 +945,21 @@ class ImageAttr extends PureComponent {
 		this.setState({ file: null, progress: null });
 	};
 
+	_remove = (id) => {
+		console.warn('dunno how to remove', id);
+	}
 
 	render() {
 		const { node, field } = this.props;
-		let attr = node.attrs.find(attr => attr.name == field.name) || {};
-		let value = attr.value || '';
-		let img;
-		if( value && attr.enc == 'DataURI' ){
-			img = <UploadedImageCard url={value} />;
-		}
+		const imgs = this.state.data.node[field.name].map(c =>
+			<UploadedImageCard
+				id={c.node.id}
+				key={c.node.id}
+				url={c.node.data.url}
+				name={c.node.name}
+				onRemove={this._remove}
+				contentType={c.node.data.contentType} />
+		)
 
 		let stats;
 		if (typeof progress === 'number') {
@@ -916,7 +979,7 @@ class ImageAttr extends PureComponent {
 				transitionLeaveTimeout={150}
 				onClick={this._handleListClick}
 			>
-				{img}
+				{imgs}
 			</CSSTransitionGroup>
 			<FileUpload
 				multiple={false}
@@ -941,6 +1004,10 @@ class EdgeAttr extends Component {
 		onRemoveEdge: PropTypes.func.isRequired,
 	}
 
+	getQueryName() {
+		return `attr_${this.props.field.name}`
+	}
+
 	_remove = (id) => {
 		const {node, field} = this.props;
 		this.props.onRemoveEdge({
@@ -950,27 +1017,44 @@ class EdgeAttr extends Component {
 		})
 	}
 
-	_add = (id) => {
+	_add = (name) => {
+		const { data } = this.state;
+		const id = data.nodes.find(n => n.name == name).id;
 		const {node, field} = this.props;
-		this.props.onSetEdge({
-			from: node.id,
-			to: id,
-			name: field.edgeName,
-		})
+		if (field.edgeDirection == 'Inbound'){
+			this.props.onSetEdge({
+				to: node.id,
+				from: id,
+				name: field.edgeName,
+			})
+		} else {
+			this.props.onSetEdge({
+				from: node.id,
+				to: id,
+				name: field.edgeName,
+			})
+		}
 	}
 
 	render() {
 		const { data } = this.state;
 		const {node, field} = this.props;
-		const ids = node.edges.filter(e => {
-			if( e.name != field.edgeName ){ // ignore other edges
+		const ids = node.connections.filter(c => {
+			if( c.name != field.edgeName ){ // ignore other connections
 				return false;
 			}
-			return e.from.id == node.id; // only from us to them ...HasMany / outbound
-		}).map(e => e.to.id);
-		const chips = ids.map(id =>
-			<NodeChip key={id} id={id} onRemove={this._remove} />
-		);
+			if( c.direction != field.edgeDirection ){
+				return false;
+			}
+			return true;
+		}).map(e => {
+			return e.node.id;
+		});
+		const chips = ids.map(id => {
+			const node = data.nodes.find(n => n.id == id);
+			const name = node ? node.name : 'unknown';
+			return <NodeChip key={id} id={id} label={name} onRemove={this._remove} />;
+		});
 		return <CSSTransitionGroup
 			transitionName="opacity"
 			transitionEnterTimeout={150}
@@ -979,9 +1063,9 @@ class EdgeAttr extends Component {
 			className="chip-list">
 				{chips}
 				<Autocomplete
-					label="Select a node"
+					label={field.name}
 					data={data.nodes}
-					dataLabel="id"
+					dataLabel="name"
 					onAutocomplete={this._add}
 					clearOnAutocomplete
 					fullWidth
@@ -994,6 +1078,7 @@ class EdgeAttr extends Component {
 export default class NodeChip extends PureComponent {
 	static propTypes = {
 		id: PropTypes.string.isRequired,
+		label: PropTypes.string.isRequired,
 		onRemove: PropTypes.func.isRequired,
 	};
 
@@ -1004,11 +1089,12 @@ export default class NodeChip extends PureComponent {
 	};
 
 	render() {
+		const { label } = this.props;
 		return <Chip
-			label={this.props.id}
+			label={label}
 			remove={this._remove}
 		>
-			<Avatar random>{this.props.id.charAt(0)}</Avatar>
+			<Avatar random>{label.charAt(0)}</Avatar>
 		</Chip>;
 	}
 }
@@ -1024,18 +1110,45 @@ class Attr extends React.Component {
 	}
 
 	render(){
-		switch( this.props.field.type ){
+		const { node, field } = this.props;
+		switch( field.type ){
 		case 'Text':      return <TextAttr {...this.props} />;
 		case 'Int':       return <TextAttr {...this.props} type="number" />;
 		case 'Float':     return <TextAttr {...this.props} type="number" />;
 		case 'Boolean':   return <BooleanAttr {...this.props} />;
-		case 'Image':     return <ImageAttr {...this.props} />;
-		case 'HasOne':
-		case 'HasMany':   return <EdgeAttr {...this.props} query={`
-			nodes {
-				id
+		case 'Edge':
+			if( field.edgeToType && field.edgeToType.name == 'Image' ){
+				return <ImageAttr {...this.props} query={`
+					node(id:"${node.id}"){
+						...on ${node.type.name} {
+							${field.name} {
+								node {
+									...on Image {
+										id
+										name
+										data {
+											contentType
+											url
+										}
+									}
+								}
+							}
+						}
+					}
+				`}/>;
+			} else {
+				 return <EdgeAttr {...this.props} query={field.edgeToTypeID ? `
+					nodes(typeID:"${field.edgeToTypeID}") {
+						id
+						name
+					}
+				` : `
+					nodes {
+						id
+						name
+					}
+				`}/>;
 			}
-		`}/>;
 		default:          return <div>UNKNOWN FIELD TYPE {this.props.field.type}</div>;
 		}
 	}
@@ -1083,7 +1196,7 @@ class NodeEditPane extends Component {
 			<Scroll>
 				<Toolbar
 					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
-					title="Edit"
+					title={`Edit ${node.type.name}`}
 					actionsRight={<div style={{marginLeft:'auto'}}>
 						<IconButton onClick={this._done}>done</IconButton>
 					</div>}
@@ -1155,15 +1268,15 @@ class NodeListPane extends Component {
 				<DataTable>
 					<TableHeader>
 						<TableRow>
-							<TableColumn>ID</TableColumn>
-							<TableColumn>Name</TableColumn>
+							<TableColumn>Name / ID</TableColumn>
+							<TableColumn> </TableColumn>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{nodes.map(n =>
 							<TableRow key={n.id} onClick={this._clickRow.bind(this, n)}>
-								<TableColumn>{n.id}</TableColumn>
-								<TableColumn>someval</TableColumn>
+								<TableColumn>{n.name}</TableColumn>
+								<TableColumn> </TableColumn>
 							</TableRow>
 						)}
 					</TableBody>
@@ -1513,8 +1626,12 @@ class App extends React.Component {
 				return client.connectSession({sessionToken});
 			})
 		}
-		conn.then(this._connected);
-		this.setState({conn});
+		conn.then(this._connected).catch(this._disconnected)
+	}
+
+	_disconnected = (err) => {
+		console.log('disconnected', err);
+		this.props.onClickLogout();
 	}
 
 	_connected = (conn) => {
@@ -1522,6 +1639,7 @@ class App extends React.Component {
 		conn.onDirty = this._showDirtyToast;
 		conn.onClean = this._hideDirtyToast;
 		conn.onClose = this._showOfflineToast;
+		this.setState({conn: Promise.resolve(conn)});
 		return conn;
 	}
 
@@ -1598,6 +1716,10 @@ class App extends React.Component {
 						${FIELD_FRAGMENT}
 					}
 				}
+				types {
+					id
+					name
+				}
 			`}/>;
 			case 'NODE_LIST':    return <NodeListPane {...props} query={`
 				type(id:"${props.typeID}"){
@@ -1608,6 +1730,7 @@ class App extends React.Component {
 				}
 				nodes(typeID:"${props.typeID}"){
 					id
+					name
 					attrs {
 						name
 						value
@@ -1629,14 +1752,12 @@ class App extends React.Component {
 						value
 						enc
 					}
-					edges {
-						to {
-							id
-						}
-						from {
-							id
-						}
+					connections {
 						name
+						direction
+						node {
+							id
+						}
 					}
 				}
 			`}/>;
@@ -1781,7 +1902,9 @@ class Chrome extends React.Component {
 	}
 
 	_removeUserToken = () => {
-		this.setState({userToken: null})
+		// this.setState({userToken: null});
+		localStorage.clear();
+		window.location.reload();
 	}
 
 	_authenticated = (userToken) => {

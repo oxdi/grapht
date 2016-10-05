@@ -3,6 +3,7 @@ package main
 import (
 	"db"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"uuid"
@@ -10,7 +11,13 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine/standard"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
+)
+
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
 )
 
 type Session struct {
@@ -111,48 +118,6 @@ func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session,
 	return session, nil
 }
 
-// func (sc *SessionCollection) GetHandler(c echo.Context) error {
-// 	token := c.QueryParam("userToken")
-// 	if token == "" {
-// 		return fmt.Errorf("userToken is required")
-// 	}
-// 	userClaims, err := DecodeClaims(token)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	u, err := userClaims.User()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	id := c.Param("id")
-// 	if id == "" {
-// 		return fmt.Errorf("id path param is required")
-// 	}
-// 	app, _ := apps.Get(id)
-// 	if app == nil {
-// 		return fmt.Errorf("only guest app sessions can be fetched")
-// 	}
-// 	// create claim to a guest session for app with a consistant sid (appID)
-// 	guestClaims := Claims{
-// 		"uid":  u.ID,
-// 		"aid":  app.ID,
-// 		"sid":  app.ID,
-// 		"role": GuestRole,
-// 	}
-// 	t, err := EncodeClaims(guestClaims)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	res := struct {
-// 		SessionToken string `json:"sessionToken"`
-// 	}{
-// 		SessionToken: t,
-// 	}
-// 	// return sessionToken
-// 	return c.JSON(http.StatusCreated, res)
-
-// }
-
 func (sc *SessionCollection) CreateHandler(c echo.Context, userClaims Claims) error {
 	params := &struct {
 		AppID string `json:"appID"`
@@ -190,13 +155,14 @@ func (sc *SessionCollection) CreateHandler(c echo.Context, userClaims Claims) er
 }
 
 func (sc *SessionCollection) ConnectHandler(c echo.Context) error {
-	params := &struct {
-		SessionToken string `json:"sessionToken"`
-	}{
-		SessionToken: c.QueryParam("sessionToken"),
-	}
-	// call the websocket handler
-	return standard.WrapHandler(websocket.Handler(func(ws *websocket.Conn) {
+	return standard.WrapHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// upgrade
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Print("upgrade:", err)
+			return
+		}
+		defer ws.Close()
 		fatal := func(err error) error {
 			send(ws, &WireMsg{
 				Type:  "fatal",
@@ -205,12 +171,13 @@ func (sc *SessionCollection) ConnectHandler(c echo.Context) error {
 			return err
 		}
 		// Validate params
-		if params.SessionToken == "" {
+		sessionToken := c.QueryParam("sessionToken")
+		if sessionToken == "" {
 			fatal(fmt.Errorf("sessionToken is required"))
 			return
 		}
 		// Decode user token
-		sessionClaims, err := DecodeClaims(params.SessionToken)
+		sessionClaims, err := DecodeClaims(sessionToken)
 		if err != nil {
 			fatal(err)
 			return
@@ -232,6 +199,7 @@ func (sc *SessionCollection) ConnectHandler(c echo.Context) error {
 			fatal(err)
 			return
 		}
+
 	}))(c)
 }
 

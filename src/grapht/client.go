@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 func send(ws *websocket.Conn, msg *WireMsg) error {
@@ -12,8 +13,8 @@ func send(ws *websocket.Conn, msg *WireMsg) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("SEND", string(data))
-	if err := websocket.Message.Send(ws, string(data)); err != nil {
+	// fmt.Println("SEND", string(data))
+	if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
 		return err
 	}
 	return nil
@@ -23,9 +24,12 @@ type Client struct {
 	ws            *websocket.Conn
 	subscriptions map[string]func()
 	session       *Session
+	sync.Mutex
 }
 
 func (c *Client) Send(msg *WireMsg) error {
+	c.Lock()
+	defer c.Unlock()
 	return send(c.ws, msg)
 }
 
@@ -107,13 +111,12 @@ func (c *Client) SendError(err error, tag string) error {
 }
 
 func (c *Client) Accept() error {
-	var data string
-	err := websocket.Message.Receive(c.ws, &data)
+	_, data, err := c.ws.ReadMessage()
 	if err != nil {
-		return err
+		return nil
 	}
 	var msg WireMsg
-	fmt.Println("RECV", data)
+	// fmt.Println("RECV", data)
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		fmt.Println("Unmarshal err ->", err)

@@ -10,6 +10,7 @@ var APP_ID = "jstest";
 var AUTHOR_TYPE_ID = uuid.v1();
 var POST_TYPE_ID = uuid.v1();
 var TAG_TYPE_ID = uuid.v1();
+var IMAGE_TYPE_ID = uuid.v1();
 
 var adminToken;
 
@@ -184,15 +185,26 @@ test("create an Author type", function(t){
 	})
 });
 
+test("create an Image type", function(t){
+	return admin.setType({
+		id: IMAGE_TYPE_ID,
+		name: "Image",
+		fields:[
+			{name:"name",type:"Text"},
+			{name:"data",type:"Image"},
+		]
+	})
+});
+
 test("create a Post type", function(t){
 	return admin.setType({
 		id: POST_TYPE_ID,
 		name:"Post",
 		fields:[
 			{name:"title",type:"Text"},
-			{name:"image",type:"Image"},
+			{name:"images",type:"Edge", edgeName:"image", edgeDirection:"Out", edgeToTypeID: IMAGE_TYPE_ID},
 			{name:"body",type:"Text"},
-			{name:"author", type:"HasOne", edgeName:"author", edgeToTypeID:AUTHOR_TYPE_ID},
+			{name:"authors", type:"Edge", edgeName:"author", edgeDirection:"Out", edgeToTypeID:AUTHOR_TYPE_ID},
 		]
 	},`
 		id
@@ -205,6 +217,7 @@ test("create a Post type", function(t){
 			edgeToType {
 				name
 			}
+			edgeDirection
 		}
 	`)
 	.then(function(res){
@@ -212,10 +225,10 @@ test("create a Post type", function(t){
 			id: POST_TYPE_ID,
 			name: "Post",
 			fields: [
-				{name: "title", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null},
-				{name: "image", type:"Image", edgeName:null, edgeToType:null, edgeToTypeID:null},
-				{name: "body", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null},
-				{name: "author", type:"HasOne", edgeName:"author",edgeToType:{name:"Author"}, edgeToTypeID: AUTHOR_TYPE_ID},
+				{name: "title", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null,edgeDirection:null},
+				{name: "images", type:"Edge", edgeName:"image", edgeToType:{name:"Image"}, edgeToTypeID:IMAGE_TYPE_ID,edgeDirection:"Out"},
+				{name: "body", type:"Text", edgeName:null, edgeToType:null, edgeToTypeID:null, edgeDirection:null},
+				{name: "authors", type:"Edge", edgeName:"author",edgeToType:{name:"Author"}, edgeToTypeID: AUTHOR_TYPE_ID,edgeDirection:"Out"},
 			]
 		})
 	})
@@ -277,7 +290,7 @@ test("create a Tag type", function(t){
 		name:"Tag",
 		fields:[
 			{name:"name",type:"Text"},
-			{name:"posts", type:"HasMany",edgeName:"tagged"}
+			{name:"posts", type:"Edge",edgeName:"tagged",edgeDirection:"Out"}
 		]
 	})
 	.then(function(res){
@@ -489,21 +502,27 @@ test("create a Cheese tag", function(t){
 	})
 });
 
-test("fetch cheddar-post with author", function(t){
+test("fetch cheddar-post with authors and images", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			id
 			...on Post {
 				title
 				body
-				author {
-					...on Author {
+				authors {
+					node {
 						id
 						name
 					}
 				}
-				image {
-					url
+				images {
+					node {
+						...on Image {
+							data {
+								url
+							}
+						}
+					}
 				}
 			}
 		}
@@ -514,23 +533,52 @@ test("fetch cheddar-post with author", function(t){
 				id: "cheddar-post",
 				title: "about cheddar",
 				body: "cheddar comes from the moon",
-				author: {
-					id: "alice",
-					name: "alice alison"
-				},
-				image: null
+				authors: [{
+					node: {
+						id: "alice",
+						name: "alice alison"
+					}
+				}],
+				images: []
 			}
 		})
 	})
 });
 
-test("fetch alice's posts (reverse of HasOne)", function(t){
+test("fetch alice's 'author' edges (nodes authored by alice)", function(t){
+	return admin.query(`
+		edges(to:"alice",name:"author") {
+			from {
+				id
+			}
+			to {
+				id
+			}
+		}
+	`)
+	.then(function(data){
+		return t.same(data, {
+			edges: [
+				{
+					to: {id: "alice"},
+					from: {id: "cheddar-post"}
+				},
+				{
+					to: {id: "alice"},
+					from: {id: "stilton-post"}
+				},
+			]
+		})
+	})
+});
+
+test("fetch alice's 'author' connections (posts authored by alice)", function(t){
 	return admin.query(`
 		alice:node(id:"alice") {
-			posts:in(name:"author") {
-				...on Post {
+			connections(name:"author") {
+				name
+				node {
 					id
-					title
 				}
 			}
 		}
@@ -538,9 +586,15 @@ test("fetch alice's posts (reverse of HasOne)", function(t){
 	.then(function(data){
 		return t.same(data, {
 			alice: {
-				posts: [
-					{id:"cheddar-post", title:"about cheddar"},
-					{id:"stilton-post", title:"about stilton"}
+				connections: [
+					{
+						name: "author",
+						node: {id: "cheddar-post"}
+					},
+					{
+						name: "author",
+						node: {id: "stilton-post"}
+					},
 				]
 			}
 		})
@@ -634,13 +688,22 @@ test("filter nodes by multiple types", function(t){
 	})
 });
 
-test("set image on cheddar-post", function(t){
+test("create an image", function(t){
 	return admin.setNode({
-		id: "cheddar-post",
-		type: "Post",
+		id: "cheddar-image",
+		type: "Image",
 		attrs: [
-			{name:"image", value: IMAGE_DATA, enc:"DataURI"}
+			{name:"name", value:"original.jpg", enc:"UTF8"},
+			{name:"data", value: IMAGE_DATA, enc:"DataURI"},
 		]
+	})
+});
+
+test("set image on cheddar-post", function(t){
+	return admin.setEdge({
+		from: "cheddar-post",
+		to: "cheddar-image",
+		name: "image",
 	})
 });
 
@@ -648,8 +711,14 @@ test("fetch image url (data-uri by default)", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
-				image {
-					url
+				images {
+					node {
+						...on Image {
+							data {
+								url
+							}
+						}
+					}
 				}
 			}
 		}
@@ -657,9 +726,40 @@ test("fetch image url (data-uri by default)", function(t){
 	.then(function(data){
 		return t.same(data, {
 			post: {
-				image: {
-					url: `data:${IMAGE_DATA}`,
+				images: [{
+					node:{
+						data: {
+							url: `data:${IMAGE_DATA}`,
+						}
+					}
+				}]
+			}
+		})
+	})
+});
+
+test("stilton-post should not have an image", function(t){
+	return admin.query(`
+		post:node(id:"stilton-post") {
+			id
+			...on Post {
+				images {
+					node {
+						...on Image {
+							data {
+								url
+							}
+						}
+					}
 				}
+			}
+		}
+	`)
+	.then(function(data){
+		return t.same(data, {
+			post: {
+				id: "stilton-post",
+				images: []
 			}
 		})
 	})
@@ -669,9 +769,16 @@ test("fetch image url and contentType", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
-				image {
-					contentType
-					url(scheme:DATA)
+				images {
+					node {
+						...on Image {
+							name
+							data {
+								contentType
+								url(scheme:DATA)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -679,10 +786,15 @@ test("fetch image url and contentType", function(t){
 	.then(function(data){
 		return t.same(data, {
 			post: {
-				image: {
-					contentType: "image/png",
-					url: `data:${IMAGE_DATA}`,
-				}
+				images: [{
+					node: {
+						name: "original.jpg",
+						data: {
+							contentType: "image/png",
+							url: `data:${IMAGE_DATA}`,
+						}
+					}
+				}]
 			}
 		})
 	})
@@ -692,8 +804,14 @@ test("fetch image as regular (scheme:HTTP)", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
-				image {
-					url(scheme:HTTP)
+				images {
+					node {
+						...on Image {
+							data {
+								url(scheme:HTTP)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -701,9 +819,13 @@ test("fetch image as regular (scheme:HTTP)", function(t){
 	.then(function(data){
 		return t.same(data, {
 			post: {
-				image: {
-					url: `//fixme.com/image.jpg`,
-				}
+				images: [{
+					node : {
+						data: {
+							url: `//fixme.com/image.jpg`,
+						}
+					}
+				}]
 			}
 		})
 	})
@@ -713,9 +835,15 @@ test("resize image (default: fill with jpeg output format)", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
-				image(width:50, height:50) {
-					contentType
-					url
+				images {
+					node {
+						...on Image {
+							data(width:50, height:50){
+								contentType
+								url
+							}
+						}
+					}
 				}
 			}
 		}
@@ -723,10 +851,14 @@ test("resize image (default: fill with jpeg output format)", function(t){
 	.then(function(data){
 		return t.same(data, {
 			post: {
-				image: {
-					contentType: "image/jpeg",
-					url: 'data:image/jpeg;base64,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'
-				}
+				images: [{
+					node: {
+						data: {
+							contentType: "image/jpeg",
+							url: 'data:image/jpeg;base64,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'
+						}
+					}
+				}]
 			}
 		})
 	})
@@ -752,16 +884,18 @@ test("disconnect alice as author of cheddar-post", function(t){
 
 test("check alice not author of cheddar-post anymore ", function(t){
 	return admin.query(`
-		node(id:"cheddar-post") {
+		alice:node(id:"cheddar-post") {
 			...on Post {
-				author {
-					id
+				authors {
+					node {
+						id
+					}
 				}
 			}
 		}
 	`)
 	.then(function(data){
-		return t.same(data, {node:{author:null}})
+		return t.same(data, {alice:{authors:[]}})
 	})
 });
 
@@ -850,12 +984,14 @@ test("guest connection should now reflect all changes", function(t){
 		return t.same(data, {
 			nodes:[
 				{id:"bob"},
+				{id:"cheddar-post"},
 				{id:"stilton-post"},
 				{id:"cheese-tag"},
-				{id:"cheddar-post"},
+				{id:"cheddar-image"},
 			],
 			types:[
 				{name:"Author"},
+				{name:"Image"},
 				{name:"Post"},
 				{name:"Tag"},
 			]})
