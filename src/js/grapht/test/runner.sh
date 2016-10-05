@@ -11,5 +11,5 @@ trap 'cleanup' EXIT
 	rm -f data/jstest;
 	rm -f data/users.json;
 	./bin/grapht >data/jstest.testlog &
-) && xvfb-run npm test
+) && xvfb-run npm run test
 

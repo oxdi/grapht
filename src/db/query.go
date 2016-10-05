@@ -1216,7 +1216,7 @@ func (cxt *GraphqlContext) AttrInputObject() *graphql.InputObject {
 	return cxt.attrInputObject
 }
 
-func (cxt *GraphqlContext) SetMutation() *graphql.Field {
+func (cxt *GraphqlContext) SetNodeMutation() *graphql.Field {
 	return &graphql.Field{
 		Description: "set node data",
 		Type:        cxt.NodeInterface(),
@@ -1250,17 +1250,25 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				return nil, err
 			}
 			g := cxt.conn.g
-			var t *graph.Type
+			var t *graph.Type = nil
 			if cfg.Type != "" {
 				t = g.TypeByName(cfg.Type)
 				if t == nil {
 					return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
 				}
-			} else {
+			} else if cfg.TypeID != "" {
 				t = g.TypeByID(cfg.TypeID)
 				if t == nil {
 					return nil, fmt.Errorf("type '%s' is not defined", cfg.Type)
 				}
+			} else if cfg.Merge {
+				old := g.Get(cfg.ID)
+				if old == nil {
+					return nil, fmt.Errorf("cannot merge node as can't find original node and no type given")
+				}
+				t = old.Type()
+			} else {
+				return nil, fmt.Errorf("type or typeID is required")
 			}
 			getField := func(name string) *graph.Field {
 				for _, field := range t.Fields {
@@ -1280,10 +1288,10 @@ func (cxt *GraphqlContext) SetMutation() *graphql.Field {
 				}
 			}
 			g = g.Set(graph.NodeConfig{
-				ID:     cfg.ID,
-				TypeID: t.ID,
-				Attrs:  cfg.Attrs,
-				Merge:  cfg.Merge,
+				ID:    cfg.ID,
+				Type:  t,
+				Attrs: cfg.Attrs,
+				Merge: cfg.Merge,
 			})
 			n := g.Get(cfg.ID)
 			if n == nil {
@@ -1335,7 +1343,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("type", cxt.GetType())
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddMutation("setType", cxt.DefineTypeMutation())
-	cxt.AddMutation("setNode", cxt.SetMutation())
+	cxt.AddMutation("setNode", cxt.SetNodeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())
 	cxt.AddMutation("setEdge", cxt.ConnectMutation())
 	cxt.AddMutation("removeEdges", cxt.DisconnectMutation())

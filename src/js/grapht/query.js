@@ -24,7 +24,11 @@ export default class Query {
 		}else if( msg.data.errors && msg.data.errors.length > 0 ){
 			this._onError(new Error(msg.data.errors.map(function(err){ return err.message}).join(' AND ')));
 		} else if( this.onData ){
-			this.onData(msg.data.data);
+			try{
+				this.onData(msg.data.data);
+			}catch(err){
+				this._onError(err);
+			}
 		}
 	}
 

@@ -1099,6 +1099,77 @@ test("subscription should update on guest.commit", function(t){
 
 })
 
+test("subscription should only update if changed", function(t){
+	var state = {dataCount: 0};
+	return admin.subscribe("main", `
+		nodes(type:Author){
+			...on Author {
+				name
+			}
+		}
+	`)
+	.then((query) => {
+		return new Promise(function(resolve){
+			query.on('data', function(data){
+				state.dataCount++;
+				switch(state.dataCount){
+				case 1:
+					t.same(data, {
+						nodes: [
+							{name:"bobby bobbington"},
+						]
+					},'first push should be initial data');
+					// set bob's age to something new
+					// which should NOT trigger a second data push
+					admin.setNode({
+						id: "bob",
+						attrs: [
+							{name:"age", value:"999", enc:"UTF8"}
+						],
+						merge: true
+					}).then(() => {
+						// then wait a bit and make a change that WILL trigger
+						// a second data push
+						setTimeout(() => {
+							admin.setNode({
+								id: "bob",
+								attrs: [
+									{name:"name", value:"bob bobbington", enc:"UTF8"}
+								],
+								merge: true
+							}).catch((err) => {
+								resolve(Promise.reject(err));
+							});
+						},100);
+					}).catch((err) => {
+						resolve(Promise.reject(err));
+					})
+					break;
+				case 2:
+					// the second set of incoming data should
+					// only be from the delayed update.
+					// There's a bit of a race here, but it should be ok
+					// for this test
+					t.same(data, {
+						nodes: [
+							{name:"bob bobbington"},
+						]
+					}, 'second push should be from the delayed updated');
+					resolve(true);
+					break;
+				default:
+					resolve(Promise.reject(new Error('received more data than expected')))
+				}
+			});
+			query.on('error', function(err){
+				t.equal(state.dataCount, 2);
+				resolve(Promise.reject(new Error(err)))
+			});
+		})
+	})
+
+})
+
 
 // end of blog tests --- it's choas from here down :)
 

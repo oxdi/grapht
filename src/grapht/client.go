@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -80,10 +81,26 @@ func (c *Client) OnMessage(msg *WireMsg) error {
 	}
 }
 
+func (c *Client) hashResult(data interface{}) uint32 {
+	b, _ := json.Marshal(data)
+	return c.hashBytes(b)
+}
+
+func (c *Client) hashBytes(b []byte) uint32 {
+	h := fnv.New32a()
+	h.Write(b)
+	return h.Sum32()
+}
+
 func (c *Client) newQueryFunc(msg *WireMsg) func() {
 	return func() {
-		fmt.Println("RUNNING QUERY")
+		fmt.Println("RUNNING QUERY", msg.Subscription)
 		result := c.session.conn.QueryWithParams(msg.Query, msg.Params)
+		dataHash := c.hashResult(result)
+		if msg.dataHash == dataHash {
+			return
+		}
+		msg.dataHash = dataHash
 		err := c.Send(&WireMsg{
 			Subscription: msg.Subscription,
 			Type:         "data",

@@ -27,6 +27,7 @@ type WireMsg struct {
 	Tag          string                 `json:"tag,omitempty"`
 	Subscription string                 `json:"subscription,omitempty"`
 	Data         interface{}            `json:"data,omitempty"`
+	dataHash     uint32
 }
 
 type HandlerWithClaims func(echo.Context, Claims) error
@@ -69,13 +70,7 @@ func StartServer() error {
 	e.POST("/apps", WrapClaims(apps.CreateHandler))
 	e.POST("/sessions", WrapClaims(sessions.CreateHandler))
 	// Socket api
-	e.GET("/connect", func(c echo.Context) error {
-		err := sessions.ConnectHandler(c)
-		if err != nil {
-			fmt.Println("CONNFAIL:", err)
-		}
-		return err
-	})
+	e.GET("/connect", sessions.ConnectHandler)
 
 	// admin ui
 	e.GET("/*", static)

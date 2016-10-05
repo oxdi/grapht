@@ -35,10 +35,17 @@ func (g *Graph) Set(v NodeConfig) *Graph {
 		}
 		g2.nodes = append(g2.nodes, n)
 	}
+	if v.Type == nil && old == nil {
+		panic("cannot set node without type")
+	}
 	n := &node{
-		id:     v.ID,
-		typeID: v.TypeID,
-		attrs:  v.Attrs,
+		id:    v.ID,
+		attrs: v.Attrs,
+	}
+	if v.Type != nil {
+		n.typeID = v.Type.ID
+	} else {
+		n.typeID = old.typeID
 	}
 	if v.Merge && old != nil {
 		inNew := func(name string) bool {

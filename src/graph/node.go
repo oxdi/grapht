@@ -16,10 +16,10 @@ type Attr struct {
 }
 
 type NodeConfig struct {
-	ID     string  `json:"id"`
-	TypeID string  `json:"typeID"`
-	Attrs  []*Attr `json:"attrs"`
-	Merge  bool    `json:"merge"`
+	ID    string  `json:"id"`
+	Type  *Type   `json:"type"`
+	Attrs []*Attr `json:"attrs"`
+	Merge bool    `json:"merge"`
 }
 
 type Nodes []*Node
