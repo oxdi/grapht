@@ -239,6 +239,9 @@ class Component extends React.Component {
 	_onQueryData = (data) => {
 		console.log(this.getQueryName(), 'incoming data', data);
 		this.setState({data});
+		if( this.onQueryData ){
+			this.onQueryData(data);
+		}
 	}
 
 	_onQueryError = (err) => {
@@ -851,7 +854,7 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 		<Switch
 			label={field.friendlyName}
 			toggled={on}
-			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})} />
+			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})} />
 	)
 }
 
@@ -1161,10 +1164,13 @@ class NodeEditPane extends Component {
 		id: PropTypes.string.isRequired,
 	}
 
-	state = {attrs: {}}
+	state = {attrs: []}
 
 	_setAttr = (attr) => {
 		const { node } = this.state.data;
+		const attrs = this.state.attrs.slice()
+		attrs.unshift(attr);
+		this.setState({attrs})
 		return this.conn().then(conn => conn.setNode({
 			id: node.id,
 			type: node.type.name,
@@ -1190,8 +1196,39 @@ class NodeEditPane extends Component {
 		this.go('NODE_LIST', {typeID:node.type.id})
 	}
 
+	findDiffAttr(savedAttrs,expectedAttrs){
+		return savedAttrs.find(attr => {
+			let exp = expectedAttrs.find(exp => exp.name == attr.name);
+			if( !exp ){
+				return true;
+			}
+			return exp.value != attr.value;
+		})
+	}
+
+	onQueryData(data){
+		let pending = true;
+		let attrs = this.state.attrs;
+		if( !this.findDiffAttr(this.state.data.node.attrs, this.optimisticNode().attrs) ) {
+			pending = false;
+			attrs = [];
+		}
+		console.log(pending, this.state.attrs);
+		this.setState({pending, attrs});
+	}
+
+	optimisticNode(){
+		return Object.assign({}, this.state.data.node, {
+			attrs: this.state.data.node.attrs.map(a => {
+				const optAttr = this.state.attrs.find(oa => oa.name == a.name);
+				return optAttr || a
+			})
+		});
+	}
+
 	render(){
-		const { node } = this.state.data;
+		const node = this.optimisticNode();
+		const status = this.state.pending ? 'saving' : 'saved';
 		return <div>
 			<Scroll>
 				<Toolbar
@@ -1204,6 +1241,7 @@ class NodeEditPane extends Component {
 				<div style={{margin:12}}>
 					{node.type.fields.map(f =>
 						<div key={f.name} style={{marginTop:18,marginBottom:18}}>
+							<div>{status}</div>
 							<Attr
 								node={node}
 								field={f}
