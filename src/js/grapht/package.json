@@ -1,13 +1,11 @@
 {
   "name": "grapht",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "grapht client",
   "main": "lib/index.js",
   "scripts": {
-    "build": "browserify index.js -o dist/bundle.js",
-    "build-tests": "browserify test/connection_test.js -o dist/testbundle.js",
-    "test2": "browserify --debug test/connection_test.js | tape-run -b chromium",
-    "test": "browserify --debug test/connection_test.js | tape-run -b chromium | node test/bail.js | faucet",
+    "test2": "npm run compile && browserify --debug test/connection_test.js | tape-run -b chromium",
+    "test": "npm run compile && browserify --debug test/connection_test.js | tape-run -b chromium | node test/bail.js | faucet",
     "compile": "rimraf lib/* && babel src -d lib",
     "prepublish": "npm run compile"
   },

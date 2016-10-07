@@ -2,7 +2,7 @@
 var IMAGE_DATA = "image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAABlBMVEUAAAD///+l2Z/dAAAAM0lEQVR4nGP4/5/h/1+G/58ZDrAz3D/McH8yw83NDDeNGe4Ug9C9zwz3gVLMDA/A6P9/AFGGFyjOXZtQAAAAAElFTkSuQmCC";
 // var WebSocket = require('ws');
 var test = require('blue-tape')
-var Grapht = require('../index.js');
+var Grapht = require('../lib/index.js');
 var uuid = require('node-uuid');
 
 var host = "localhost:8282";
