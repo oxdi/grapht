@@ -1,4 +1,4 @@
-import Connection from './connection';
+import Connection from './Connection';
 
 export default class Store {
 

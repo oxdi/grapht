@@ -1,4 +1,4 @@
-import Query from './query';
+import Query from './Query';
 
 const QUERY = "query";
 const EXEC = "exec";
