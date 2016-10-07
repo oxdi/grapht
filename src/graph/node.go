@@ -50,6 +50,12 @@ func (ns Nodes) FilterType(types ...*Type) Nodes {
 	return ns2
 }
 
+func (ns Nodes) Len() int      { return len(ns) }
+func (ns Nodes) Swap(i, j int) { ns[i], ns[j] = ns[j], ns[i] }
+func (ns Nodes) Less(i, j int) bool {
+	return ns[i].ID() < ns[j].ID()
+}
+
 type node struct {
 	id     string
 	attrs  []*Attr

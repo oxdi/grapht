@@ -613,8 +613,8 @@ test("list all nodes", function(t){
 				{id: "alice"},
 				{id: "bob"},
 				{id: "cheddar-post"},
-				{id: "stilton-post"},
 				{id: "cheese-tag"},
+				{id: "stilton-post"},
 			]
 		})
 	})
@@ -681,8 +681,8 @@ test("filter nodes by multiple types", function(t){
 		return t.same(data, {
 			nodes: [
 				{id: "cheddar-post"},
-				{id: "stilton-post"},
 				{id: "cheese-tag"},
+				{id: "stilton-post"},
 			]
 		})
 	})
@@ -984,10 +984,10 @@ test("guest connection should now reflect all changes", function(t){
 		return t.same(data, {
 			nodes:[
 				{id:"bob"},
-				{id:"cheddar-post"},
-				{id:"stilton-post"},
-				{id:"cheese-tag"},
 				{id:"cheddar-image"},
+				{id:"cheddar-post"},
+				{id:"cheese-tag"},
+				{id:"stilton-post"},
 			],
 			types:[
 				{name:"Author"},

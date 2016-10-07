@@ -6,6 +6,7 @@ import (
 	"graph"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/graphql-go/graphql"
@@ -1008,7 +1009,7 @@ func (cxt *GraphqlContext) NodeListField(t *graph.Type) *graphql.Field {
 				ts = append(ts, t)
 			}
 			ns = ns.FilterType(ts...)
-			// ns = ns.Sort(args.Sort)
+			sort.Sort(ns) // sort by id
 			return ns, nil
 		},
 	}
