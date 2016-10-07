@@ -14,6 +14,7 @@ import (
 // Field Types
 const (
 	Text      = "Text"
+	RichText  = "RichText"
 	Int       = "Int"
 	Float     = "Float"
 	Boolean   = "Boolean"
@@ -40,8 +41,9 @@ func nilSourceError(fieldName, typeName string) error {
 }
 
 var validIdent = regexp.MustCompile(`^[_a-zA-Z][_a-zA-Z0-9]*$`)
-var validFieldType = regexp.MustCompile(`^(Text|Int|Float|Boolean|Edge|File|Image)$`)
+var validFieldType = regexp.MustCompile(`^(Text|RichText|Int|Float|Boolean|Edge|File|Image)$`)
 var validEdgeDirection = regexp.MustCompile(`^(In|Out)$`)
+var validEncType = regexp.MustCompile(`^(UTF8|DataURI|JSON)$`)
 
 var reservedWords = []string{
 	"node",
@@ -138,6 +140,9 @@ func (cxt *GraphqlContext) ValueTypeEnum() *graphql.Enum {
 		Values: graphql.EnumValueConfigMap{
 			string(Text): &graphql.EnumValueConfig{
 				Description: "Generic text field",
+			},
+			string(RichText): &graphql.EnumValueConfig{
+				Description: "Rich text field",
 			},
 			string(Int): &graphql.EnumValueConfig{
 				Description: "Generic int field",
@@ -710,6 +715,8 @@ func (cxt *GraphqlContext) ValueType(fd *graph.Field) graphql.Output {
 		return cxt.ImageObject()
 	case Edge:
 		return graphql.NewList(cxt.ConnectionObject())
+	case RichText:
+		return graphql.String
 	default:
 		panic(fmt.Sprintf("unknown ValueType '%s'", fd.Type))
 	}
@@ -854,7 +861,7 @@ func (cxt *GraphqlContext) FieldNameEnum() *graphql.Enum {
 	return cxt.fieldNameEnum
 }
 
-func (cxt *GraphqlContext) DefineTypeMutation() *graphql.Field {
+func (cxt *GraphqlContext) SetTypeMutation() *graphql.Field {
 	return &graphql.Field{
 		Description: "Create a new type",
 		Type:        cxt.TypeObject(),
@@ -1279,6 +1286,9 @@ func (cxt *GraphqlContext) SetNodeMutation() *graphql.Field {
 				return nil
 			}
 			for _, attr := range cfg.Attrs {
+				if !validEncType.MatchString(attr.Enc) {
+					return nil, fmt.Errorf("cannot set field: '%s' is not a valid field enc type", attr.Enc)
+				}
 				if !validIdent.MatchString(attr.Name) {
 					return nil, fmt.Errorf("cannot set field: '%s' is not a valid field name", attr.Name)
 				}
@@ -1342,7 +1352,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("edges", cxt.GetEdges())
 	cxt.AddQuery("type", cxt.GetType())
 	cxt.AddQuery("types", cxt.GetTypes())
-	cxt.AddMutation("setType", cxt.DefineTypeMutation())
+	cxt.AddMutation("setType", cxt.SetTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetNodeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())
 	cxt.AddMutation("setEdge", cxt.ConnectMutation())

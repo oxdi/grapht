@@ -1395,3 +1395,50 @@ test.skip("should be possible to set null node value", function(t){
 		})
 	})
 });
+
+test("RichText type", function(t){
+	const obj = {a:1,b:2};
+	return admin.setType({
+		id: uuid.v1(),
+		name:"Story",
+		fields:[
+			{name:"blurb",type:"RichText"},
+		]
+	},`
+		fields {
+			name
+			type
+		}
+	`)
+	.then(function(res){
+		return t.same(res, {
+			fields: [
+				{name:"blurb", type: "RichText"},
+			]
+		})
+	}).then(function(){
+		return admin.setNode({
+			id: uuid.v1(),
+			type: "Story",
+			attrs: [
+				{name:"blurb",enc:"JSON",value:JSON.stringify(obj)},
+			]
+		},`
+			...on Story {
+				attrs {
+					name
+					value
+					enc
+				}
+				blurb
+			}
+		`)
+	}).then(function(res){
+		return t.same(res, {
+			attrs: [
+				{name:"blurb",enc:"JSON",value: JSON.stringify(obj)},
+			],
+			blurb: JSON.stringify(obj),
+		})
+	})
+});

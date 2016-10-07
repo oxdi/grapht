@@ -6,6 +6,8 @@ import { render } from 'react-dom';
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
+import RichTextAttr from './RichTextAttr';
+
 const MAIN_WIDTH = 380;
 const FIELD_FRAGMENT = `
 	name
@@ -59,6 +61,7 @@ import {
 import SelectField from 'react-md/lib/SelectFields';
 import Autocomplete from 'react-md/lib/Autocompletes';
 import { FileUpload } from 'react-md/lib/FileInputs';
+import Component from './Component';
 
 WebFont.load({
 	google: {
@@ -68,6 +71,7 @@ WebFont.load({
 
 const FIELD_TYPES = [
 	'Text',
+	'RichText',
 	'Int',
 	'Float',
 	'Boolean',
@@ -93,166 +97,6 @@ const FloatingAddButton = (props) => <FloatingButton
 	{...props}
 >add</FloatingButton>;
 
-class Component extends React.Component {
-
-	static propTypes = {
-		query: PropTypes.string,
-	}
-
-	static contextTypes = {
-		userToken: PropTypes.string.isRequired,
-		appID: PropTypes.string.isRequired,
-		onError: PropTypes.func.isRequired,
-		onSetPane: PropTypes.func.isRequired,
-		mobile: PropTypes.bool.isRequired,
-		tablet: PropTypes.bool.isRequired,
-		desktop: PropTypes.bool.isRequired,
-		conn: PropTypes.object.isRequired,
-	}
-
-	constructor(...args){
-		super(...args);
-		this.uniqueID = `${this.constructor.name}_${Date.now()}`;
-		this.mounted = true;
-		this.__render = this.render;
-		this.render = () => {
-			if( !this.isConnected() ){
-				return <CircularProgress />;
-			}
-			let q = this.props.query;
-			if( q && !this.state.data ){
-				return <CircularProgress />;
-			}
-			return this.__render();
-		}
-	}
-
-	state = {}
-
-	componentDidMount(){
-		this.subscribe(this.props.query);
-	}
-
-	componentWillUnmount(){
-		console.log(this.getQueryName(), 'unmounting');
-		this.mounted = false;
-		this.unsubscribe();
-	}
-
-	componentWillReceiveProps(nextProps,nextContext){
-		if( this.props.query != nextProps.query ){
-			console.log('resub');
-			this.unsubscribe().then(() => this.subscribe(nextProps.query));
-		}
-	}
-
-	isMobile(){
-		return this.context.mobile;
-	}
-
-	isTablet(){
-		return this.context.tablet;
-	}
-
-	isDesktop(){
-		return this.context.desktop;
-	}
-
-	getAppID(){
-		return this.context.appID;
-	}
-
-	getQueryName(){
-		return this.uniqueID;
-	}
-
-	unsubscribe(){
-		if( !this.query ){
-			return Promise.resolve();
-		}
-		return this.conn()
-			.then(this._unsubscribe)
-			.catch(this._toast)
-	}
-
-	subscribe(q){
-		if( !q ){
-			return Promise.resolve();
-		}
-		return this.conn()
-			.then(this._subscribe)
-			.catch(this._toast)
-	}
-
-	go(name, params){
-		this.context.onSetPane(name, params);
-	}
-
-	isConnected(){
-		return !!this.context.conn;
-	}
-
-	conn(){
-		if( !this.isConnected() ){
-			throw new Error('not connected');
-		}
-		if( !this.context.conn ){
-			throw new Error('no conn in context');
-		}
-		return this.context.conn;
-	}
-
-	toast(msg,action){
-		this.context.onError(msg, action);
-	}
-
-	_unsubscribe = (conn) => {
-		return conn.unsubscribe(this.getQueryName())
-			.then(this._onUnsubscribe)
-			.catch(this._toast)
-	}
-
-	_onUnsubscribe = () => {
-		console.log(this.getQueryName(), 'unsubscribed');
-		this.query = null;
-		if( this.mounted ){
-			this.setState({data:null});
-		}
-	}
-
-
-	_subscribe = (conn) => {
-		let q = this.props.query;
-		return conn.subscribe(this.getQueryName(), q)
-			.then(this._onSubscribe)
-			.catch(this._toast)
-	}
-
-	_onSubscribe = (query) => {
-		query.on('data', this._onQueryData);
-		query.on('error', this._onQueryError);
-		this.query = query;
-		console.log(this.getQueryName(), 'subscribed', query.query);
-
-	}
-
-	_onQueryData = (data) => {
-		console.log(this.getQueryName(), 'incoming data', data);
-		this.setState({data});
-		if( this.onQueryData ){
-			this.onQueryData(data);
-		}
-	}
-
-	_onQueryError = (err) => {
-		this.toast(err)
-	}
-
-	_toast = (msg,action) => {
-		this.toast(msg, action);
-	}
-
-}
 
 
 const Scroll = (props) => {
@@ -1116,6 +960,7 @@ class Attr extends React.Component {
 		const { node, field } = this.props;
 		switch( field.type ){
 		case 'Text':      return <TextAttr {...this.props} />;
+		case 'RichText':  return <RichTextAttr {...this.props} />;
 		case 'Int':       return <TextAttr {...this.props} type="number" />;
 		case 'Float':     return <TextAttr {...this.props} type="number" />;
 		case 'Boolean':   return <BooleanAttr {...this.props} />;
@@ -1245,6 +1090,7 @@ class NodeEditPane extends Component {
 							<Attr
 								node={node}
 								field={f}
+								attr={node.attrs.find(a => a.name == f.name)}
 								onSetAttr={this._setAttr}
 								onSetEdge={this._setEdge}
 								onRemoveEdge={this._removeEdge}

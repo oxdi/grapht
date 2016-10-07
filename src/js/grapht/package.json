@@ -1,8 +1,8 @@
 {
   "name": "grapht",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "grapht client",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "browserify index.js -o dist/bundle.js",
     "build-tests": "browserify test/connection_test.js -o dist/testbundle.js",
@@ -20,6 +20,7 @@
     "colortape": "^0.1.1",
     "faucet": "0.0.1",
     "node-uuid": "^1.4.7",
+    "rimraf": "^2.5.4",
     "tap-bail": "0.0.0",
     "tap-diff": "^0.1.1",
     "tap-nyan": "0.0.2",
