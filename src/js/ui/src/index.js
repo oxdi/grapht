@@ -7,6 +7,7 @@ import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
 
 import RichTextAttr from './RichTextAttr';
+import AttrToolbar from './AttrToolbar';
 
 const MAIN_WIDTH = 380;
 const FIELD_FRAGMENT = `
@@ -119,6 +120,7 @@ class AppLayout extends Component {
 		sidebar: PropTypes.node.isRequired,
 		main: PropTypes.node.isRequired,
 		preview: PropTypes.node.isRequired,
+		containerStyle: PropTypes.object,
 	}
 
 	state = {preview:true}
@@ -149,6 +151,12 @@ class AppLayout extends Component {
 		this.setState({preview});
 	}
 
+	_closeSidebarIfFloating = () => {
+		if( this.sidebarIsOverlay() && this.sidebarIsVisible() ){
+			this.setState({sidebar: false});
+		}
+	}
+
 	_captureClick = () => {
 		if( !this.sidebarIsOverlay() ){
 			return;
@@ -159,6 +167,7 @@ class AppLayout extends Component {
 	}
 
 	styles(){
+		const containerStyle = this.props.containerStyle || {};
 		let styles = {
 			container: {
 				display: 'flex',
@@ -168,6 +177,7 @@ class AppLayout extends Component {
 				right: 0,
 				left: 0,
 				transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
+				...containerStyle,
 			},
 			sidebar: {
 				position: 'relative',
@@ -249,10 +259,13 @@ class AppLayout extends Component {
 			onToggleSidebar: this._toggleSidebar,
 			onTogglePreview: this._togglePreview,
 		});
+		let sidebar = this.props.sidebar && React.cloneElement(this.props.sidebar, {
+			closeSidebarIfFloating: this._closeSidebarIfFloating,
+		});
 		let styles = this.styles();
 		return <div style={styles.container}>
 			<div style={styles.sidebar}>
-				{this.props.sidebar}
+				{sidebar}
 			</div>
 			<div style={styles.main} onClickCapture={this._captureClick}>
 				{main}
@@ -269,6 +282,7 @@ class AppSidebar extends Component {
 	static propTypes = {
 		onClickLogout: PropTypes.func.isRequired,
 		onClickClose: PropTypes.func.isRequired,
+		closeSidebarIfFloating: PropTypes.func,
 		query: PropTypes.string.isRequired,
 	}
 
@@ -282,10 +296,12 @@ class AppSidebar extends Component {
 
 	_clickTypes = () => {
 		this.go('TYPE_LIST');
+		this.props.closeSidebarIfFloating();
 	}
 
 	_clickContent = (type) => {
 		this.go('NODE_LIST', {typeID: type.id});
+		this.props.closeSidebarIfFloating();
 	}
 
 	render(){
@@ -391,6 +407,7 @@ class FieldExpansionPanel extends React.Component {
 		const edgeToType = types.find(t => t.id == field.edgeToTypeID);
 		return (
 			<ExpansionPanel
+				className="field"
 				saveLabel="done"
 				onSave={this._collapse}
 				onCancel={this._collapse}
@@ -672,18 +689,25 @@ const TextAttr = ({node,field,onSetAttr,type}) => {
 		opts.type = type;
 	}
 	let attr = node.attrs.find(attr => attr.name == field.name) || {};
-	return (
+	let iconName = 'wrap_text';
+	if( field.textLineLimit < 2 ){
+		iconName = 'short_text';
+	}
+	if( type == 'number' ){
+		iconName = 'format_number_list';
+	}
+	return <div>
+		<AttrToolbar title={field.friendlyName} icon={iconName} />
 		<TextField
 			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
-			label={field.friendlyName}
 			value={attr.value || ''}
 			maxLength={field.textCharLimit}
-			fullWidth
-			helpText={field.hint}
+			block
+			placeholder={field.friendlyName}
 			required={field.required}
 			{...opts}
 		/>
-	)
+	</div>;
 }
 
 const BooleanAttr = ({node,field,onSetAttr}) => {
@@ -694,12 +718,12 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 			attr.value === 1 ||
 			(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
 	}
-	return (
+	return <div>
+		<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
 		<Switch
-			label={field.friendlyName}
 			toggled={on}
 			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})} />
-	)
+	</div>;
 }
 
 class UploadedImageCard extends PureComponent {
@@ -836,7 +860,7 @@ class ImageAttr extends Component {
 				multiple={false}
 				secondary
 				ref="upload"
-				label="Select image"
+				label="Add Image"
 				onLoadStart={this._setFile}
 				onProgress={this._handleProgress}
 				onLoad={this._onLoad}
@@ -910,13 +934,14 @@ class EdgeAttr extends Component {
 			className="chip-list">
 				{chips}
 				<Autocomplete
-					label={field.name}
+					label="Search for item..."
 					data={data.nodes}
 					dataLabel="name"
 					onAutocomplete={this._add}
 					clearOnAutocomplete
 					fullWidth
-					deleteKeys="abbreviation"
+					block
+					floatingLabel={false}
 				/>
 		</CSSTransitionGroup>;
 	}
@@ -1084,7 +1109,7 @@ class NodeEditPane extends Component {
 				/>
 				<div style={{margin:12}}>
 					{node.type.fields.map(f =>
-						<div key={f.name} style={{marginTop:18,marginBottom:18}}>
+						<div key={f.name} className="attr" style={{marginTop:18,marginBottom:18}}>
 							<Attr
 								node={node}
 								field={f}
@@ -1093,9 +1118,12 @@ class NodeEditPane extends Component {
 								onSetEdge={this._setEdge}
 								onRemoveEdge={this._removeEdge}
 							/>
+							{f.hint ? <p className="md-caption">{f.hint}</p> : null}
+							<Divider />
 						</div>
 					)}
 				</div>
+				<div style={{height:250}}></div>
 			</Scroll>
 		</div>
 	}
@@ -1467,6 +1495,7 @@ class App extends React.Component {
 		onSetPane: PropTypes.func.isRequired,
 		pane: PropTypes.string.isRequired,
 		paneProps: PropTypes.object.isRequired,
+		layoutStyle: PropTypes.object,
 	}
 
 	static childContextTypes = {
@@ -1648,16 +1677,17 @@ class App extends React.Component {
 	}
 
 	render(){
-		const {path, onClickClose, onClickLogout} = this.props;
+		const {layoutStyle, onClickClose, onClickLogout} = this.props;
 		const {conn} = this.state;
 		if( !conn ){
 			return <CircularProgress />;
 		}
 		return <AppLayout
+			containerStyle={layoutStyle}
 			sidebar={
 				<AppSidebar
-					onClickClose={this.props.onClickClose}
-					onClickLogout={this.props.onClickLogout}
+					onClickClose={onClickClose}
+					onClickLogout={onClickLogout}
 					conn={this.state.conn}
 					query={`
 						types {
@@ -1704,9 +1734,9 @@ class Chrome extends React.Component {
 
 	componentDidMount(){
 		const mq = {
-			mobile: window.matchMedia(`(min-width: 0px) and (max-width: 400px)`),
-			tablet: window.matchMedia(`(min-width: 400px) and (max-width: 800px)`),
-			desktop: window.matchMedia(`(min-width: 800px)`),
+			mobile: window.matchMedia(`(min-width: 0px) and (max-width: 600px)`),
+			tablet: window.matchMedia(`(min-width: 600px) and (max-width: 900px)`),
+			desktop: window.matchMedia(`(min-width: 900px)`),
 		};
 		this.unlisten = Object.keys(mq).map(name => {
 			let fn = () => {
@@ -1815,6 +1845,10 @@ class Chrome extends React.Component {
 		} else if ( /fairlight/.test(this.state.appID)) {
 			url = 'http://google.com/';
 		}
+		const layoutStyle = {};
+		if( this.state.toasts.length > 0 ){
+			layoutStyle.bottom = 48;
+		}
 		return <App id={this.state.appID}
 					key={this.state.appID}
 					userToken={this.state.userToken}
@@ -1827,6 +1861,7 @@ class Chrome extends React.Component {
 					onSetPane={this._setPane}
 					pane={this.state.pane}
 					paneProps={this.state.paneProps}
+					layoutStyle={layoutStyle}
 		/>;
 	}
 

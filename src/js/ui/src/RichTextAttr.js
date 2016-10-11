@@ -10,9 +10,12 @@ import {
 	FontIcon,
 	TextField,
 	Toolbar,
+	Menu,
+	ListItem,
 } from 'react-md';
 import SelectField from 'react-md/lib/SelectFields';
 import Autocomplete from 'react-md/lib/Autocompletes';
+import AttrToolbar from './AttrToolbar';
 
 const Link = ({entityKey, children}) => {
 	const { url } = Entity.get(entityKey).getData();
@@ -165,16 +168,38 @@ export default class RichTextAttr extends React.Component {
 		this.setState({showLinkDialog: false}, this._focus);
 	}
 
+	_hideToolMenu = () => {
+		this.setState({showToolMenu: false});
+	}
+
+	_showToolMenu = () => {
+		this.setState({showToolMenu: true});
+	}
+
 	render() {
 		const {editorState} = this.state;
-		console.log('render edit state:', convertToRaw(editorState.getCurrentContent()));
+		const {field} = this.props;
+		const flex = {flex:1};
 		return <div>
-			<div>
+			<AttrToolbar title={field.friendlyName} icon="art_track">
 				<IconButton onClick={this._onClickBold}>format_bold</IconButton>
 				<IconButton onClick={this._onClickItalic}>format_italic</IconButton>
 				<IconButton onClick={this._showLinkDialog}>link</IconButton>
-				<IconButton onClick={this._onClickClearFormatting}>format_clear</IconButton>
-			</div>
+				<SelectField label="Style" menuItems={['Normal','Heading 1', 'Heading 2']} position={SelectField.Positions.BELOW} />
+				<Menu isOpen={!!this.state.showToolMenu}
+					toggle={<IconButton onClick={this._showToolMenu} tooltipLabel="More options">more_vert</IconButton>}
+					close={this._hideToolMenu}
+				>
+					<ListItem primaryText="Clear Formatting"
+						leftIcon={<FontIcon>format_clear</FontIcon>}
+						onClick={this._clearFormatting}
+					/>
+					<ListItem primaryText="Clear Formatting"
+						leftIcon={<FontIcon>format_clear</FontIcon>}
+						onClick={this._clearFormatting}
+					/>
+				</Menu>
+			</AttrToolbar>
 			<Editor ref="editor" stripPastedStyles spellCheck editorState={editorState} onChange={this._onChange} />
 			<LinkDialog isOpen={this.state.showLinkDialog} onCancel={this._hideLinkDialog} onSetLink={this._setLink} />
 		</div>;
