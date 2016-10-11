@@ -694,10 +694,10 @@ const TextAttr = ({node,field,onSetAttr,type}) => {
 		iconName = 'short_text';
 	}
 	if( type == 'number' ){
-		iconName = 'format_number_list';
+		iconName = 'timeline';
 	}
 	return <div>
-		<AttrToolbar title={field.friendlyName} icon={iconName} />
+		<AttrToolbar title={field.friendlyName || field.name} icon={iconName} />
 		<TextField
 			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
 			value={attr.value || ''}
@@ -926,24 +926,27 @@ class EdgeAttr extends Component {
 			const name = node ? node.name : 'unknown';
 			return <NodeChip key={id} id={id} label={name} onRemove={this._remove} />;
 		});
-		return <CSSTransitionGroup
-			transitionName="opacity"
-			transitionEnterTimeout={150}
-			transitionLeaveTimeout={150}
-			component="div"
-			className="chip-list">
-				{chips}
-				<Autocomplete
-					label="Search for item..."
-					data={data.nodes}
-					dataLabel="name"
-					onAutocomplete={this._add}
-					clearOnAutocomplete
-					fullWidth
-					block
-					floatingLabel={false}
-				/>
-		</CSSTransitionGroup>;
+		return <div>
+			<AttrToolbar title={field.friendlyName || field.name} icon="collections" />
+			<CSSTransitionGroup
+				transitionName="opacity"
+				transitionEnterTimeout={150}
+				transitionLeaveTimeout={150}
+				component="div"
+				className="chip-list">
+					{chips}
+					<Autocomplete
+						label="Search for item..."
+						data={data.nodes}
+						dataLabel="name"
+						onAutocomplete={this._add}
+						clearOnAutocomplete
+						fullWidth
+						block
+						floatingLabel={false}
+					/>
+			</CSSTransitionGroup>
+		</div>;
 	}
 }
 

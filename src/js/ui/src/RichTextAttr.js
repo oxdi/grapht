@@ -58,6 +58,13 @@ const decorator = new CompositeDecorator([
 	},
 ]);
 
+const BLOCK_TYPES = [
+	{name: 'Normal', type: 'unstyled'},
+	{name: 'Heading', type: 'header-one'},
+	{name: 'Subheading', type: 'header-two'},
+	{name: 'Quote', type: 'blockquote'},
+];
+
 export default class RichTextAttr extends React.Component {
 
 	static propTypes = {
@@ -132,6 +139,10 @@ export default class RichTextAttr extends React.Component {
 		this._onChange(RichUtils.toggleInlineStyle(this.state.editorState, 'ITALIC'));
 	}
 
+	_changeBlockStyle = ({type}) => {
+		this._onChange(RichUtils.toggleBlockType(this.state.editorState, type));
+	}
+
 	_showLinkDialog = (e) => {
 		if (e && e.preventDefault) {
 			e.preventDefault();
@@ -178,6 +189,12 @@ export default class RichTextAttr extends React.Component {
 
 	render() {
 		const {editorState} = this.state;
+		const selection = editorState.getSelection();
+		const blockType = editorState
+			.getCurrentContent()
+			.getBlockForKey(selection.getStartKey())
+			.getType();
+		const blockItem = BLOCK_TYPES.find(t => t.type == blockType);
 		const {field} = this.props;
 		const flex = {flex:1};
 		return <div>
@@ -185,7 +202,7 @@ export default class RichTextAttr extends React.Component {
 				<IconButton onClick={this._onClickBold}>format_bold</IconButton>
 				<IconButton onClick={this._onClickItalic}>format_italic</IconButton>
 				<IconButton onClick={this._showLinkDialog}>link</IconButton>
-				<SelectField label="Style" menuItems={['Normal','Heading 1', 'Heading 2']} position={SelectField.Positions.BELOW} />
+				<SelectField label="Style" itemLabel="name" menuItems={BLOCK_TYPES} position={SelectField.Positions.BELOW} onChange={this._changeBlockStyle} value={blockItem ? blockItem.name : 'Normal'} />
 				<Menu isOpen={!!this.state.showToolMenu}
 					toggle={<IconButton onClick={this._showToolMenu} tooltipLabel="More options">more_vert</IconButton>}
 					close={this._hideToolMenu}
