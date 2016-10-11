@@ -1,6 +1,59 @@
 import React from 'react';
 import { PropTypes } from 'react';
-import {Editor, EditorState, convertToRaw, convertFromRaw} from 'draft-js';
+import {Editor, CompositeDecorator, Entity, Modifier, EditorState, RichUtils, convertToRaw, convertFromRaw} from 'draft-js';
+import {
+	FlatButton,
+	IconButton,
+	Dialog,
+	Tabs,
+	Tab,
+	FontIcon,
+	TextField,
+	Toolbar,
+} from 'react-md';
+import SelectField from 'react-md/lib/SelectFields';
+import Autocomplete from 'react-md/lib/Autocompletes';
+
+const Link = ({entityKey, children}) => {
+	const { url } = Entity.get(entityKey).getData();
+	return <a href={url}>
+		{children}
+	</a>;
+};
+
+const NodeLink = ({entityKey, children}) => {
+	const { id } = Entity.get(entityKey).getData();
+	return <a href={`#node:${id}`}>
+		{children}
+	</a>;
+};
+
+function isType(...types){
+	return function(contentBlock, callback) {
+		contentBlock.findEntityRanges((character) => {
+			const key = character.getEntity();
+			if( key === null ){
+				return false;
+			}
+			const entity = Entity.get(key);
+			if( !entity ){
+				return false;
+			}
+			return !!types.find(t => t == entity.getType());
+		}, callback);
+	};
+}
+
+const decorator = new CompositeDecorator([
+	{
+		strategy: isType('NODE_LINK'),
+		component: NodeLink,
+	},
+	{
+		strategy: isType('LINK'),
+		component: Link,
+	},
+]);
 
 export default class RichTextAttr extends React.Component {
 
@@ -12,55 +65,203 @@ export default class RichTextAttr extends React.Component {
 
 	constructor(props) {
 		super(props);
-		this.state = {editorState: this.getEditorState()};
+		this.state = {
+			editorState: this.getEditorState(),
+			showLinkDialog: false,
+		};
 	}
 
 	_onChange = (editorState) => {
 		const { field } = this.props;
+		const newValue = JSON.stringify(convertToRaw(editorState.getCurrentContent()));
+		const oldValue = JSON.stringify(convertToRaw(this.state.editorState.getCurrentContent()));
 		this.setState({editorState});
+		if( newValue == oldValue ){
+			return;
+		}
 		this.setAttr({
 			name: field.name,
 			enc: "JSON",
-			value: JSON.stringify(convertToRaw(editorState.getCurrentContent())),
+			value: newValue,
 		});
 	}
 
 	setAttr(attr) {
-		if( this.pendingAttr && this.pendingAttr.value == attr.value ){
+		if( this.latestAttr && this.latestAttr.value == attr.value ){
 			return;
 		}
-		this.pendingAttr = attr;
+		this.latestAttr = attr;
 		clearTimeout(this.timer);
 		this.timer = setTimeout(this._setPendingAttr,500);
 	}
 
 	_setPendingAttr = () => {
-		if( !this.pendingAttr ){
+		if( !this.latestAttr ){
 			return;
 		}
-		this.props.onSetAttr(this.pendingAttr)
+		this.props.onSetAttr(this.latestAttr, this._focus);
 	}
 
 	getEditorState(){
 		const {node,field} = this.props;
 		const attr = node.attrs.find(a => a.name == field.name);
 		if( !attr ){
-			return EditorState.createEmpty();
+			return EditorState.createEmpty(decorator);
 		}
 		try {
 			return EditorState.createWithContent(
-				convertFromRaw(JSON.parse(attr.value))
+				convertFromRaw(JSON.parse(attr.value)),
+				decorator
 			);
 		} catch(err) {
 			console.warn('bad rich text value', err);
-			return EditorState.createEmpty();
+			return EditorState.createEmpty(decorator);
 		}
 	}
 
+	_onClickBold = (e) => {
+		e.preventDefault();
+		this._onChange(RichUtils.toggleInlineStyle(this.state.editorState, 'BOLD'));
+	}
+
+	_onClickItalic = (e) => {
+		e.preventDefault();
+		this._onChange(RichUtils.toggleInlineStyle(this.state.editorState, 'ITALIC'));
+	}
+
+	_showLinkDialog = (e) => {
+		if (e && e.preventDefault) {
+			e.preventDefault();
+		}
+		this.setState({showLinkDialog: true});
+	}
+
+	_hideLinkDialog = () => {
+		this.setState({showLinkDialog: false}, this._focus);
+	}
+
+	_focus = () => {
+		this.refs.editor.focus(0);
+	}
+
+	_setLink = ({type,id,url}) => {
+		const { editorState } = this.state;
+		const key = type == 'INT' ?
+			Entity.create(
+				'NODE_LINK',
+				'MUTABLE',
+				{id}
+			) :
+			Entity.create(
+				'LINK',
+				'MUTABLE',
+				{url}
+			) ;
+		 this._onChange(RichUtils.toggleLink(
+			 editorState,
+			 editorState.getSelection(),
+			 key
+		));
+		this.setState({showLinkDialog: false}, this._focus);
+	}
 
 	render() {
 		const {editorState} = this.state;
-		return <Editor editorState={editorState} onChange={this._onChange} />;
+		console.log('render edit state:', convertToRaw(editorState.getCurrentContent()));
+		return <div>
+			<div>
+				<IconButton onClick={this._onClickBold}>format_bold</IconButton>
+				<IconButton onClick={this._onClickItalic}>format_italic</IconButton>
+				<IconButton onClick={this._showLinkDialog}>link</IconButton>
+				<IconButton onClick={this._onClickClearFormatting}>format_clear</IconButton>
+			</div>
+			<Editor ref="editor" stripPastedStyles spellCheck editorState={editorState} onChange={this._onChange} />
+			<LinkDialog isOpen={this.state.showLinkDialog} onCancel={this._hideLinkDialog} onSetLink={this._setLink} />
+		</div>;
 	}
 
 }
+
+class LinkDialog extends React.Component {
+
+	static propTypes = {
+		isOpen: PropTypes.bool.isRequired,
+		onCancel: PropTypes.func.isRequired,
+		onSetLink: PropTypes.func.isRequired,
+	}
+
+	state = {linkType:'INT',linkURL:'',data:{}}
+
+	_cancel = () => {
+		this.props.onCancel();
+	}
+
+	_confirm = () => {
+		this.props.onSetLink({
+			type: this.state.linkType,
+			url: this.state.linkURL,
+			id: this.state.linkID,
+		});
+	}
+
+	_setTab = (idx) => {
+		const linkType = idx == 0 ? 'INT' : 'EXT';
+		this.setState({linkType});
+	}
+
+	_setLinkURL = (linkURL) => {
+		this.setState({linkURL})
+	}
+
+	renderInternalTab() {
+		return <div>
+			<Autocomplete
+				label="Link to"
+				data={[]}
+				fullWidth
+			/>
+		</div>;
+	}
+
+	renderExtenralTab() {
+		return <div>
+			<TextField
+				label="URL"
+				value={this.state.linkURL || ''}
+				onChange={this._setLinkURL}
+				floatingLabel
+				fullWidth
+			/>
+		</div>;
+	}
+
+	renderTab() {
+		if( this.state.linkType === 'INT' ){
+			return this.renderInternalTab();
+		} else {
+			return this.renderExtenralTab();
+		}
+	}
+
+	renderActions(){
+		return <div style={{marginLeft:'auto'}}>
+			<FlatButton type="button" className="md-toolbar-item" label="Cancel" onClick={this._cancel}/>
+			<FlatButton type="submit" className="md-toolbar-item" primary label="Link" onClick={this._confirm}/>
+		</div>;
+	}
+
+	render() {
+		const {isOpen} = this.props;
+		return <Dialog isOpen={isOpen} close={this._cancel}>
+			<Tabs centered fixedWidth primary>
+				<Tab label="Internal" icon={<FontIcon>link</FontIcon>} onChange={this._setTab} />
+				<Tab label="External" icon={<FontIcon>public</FontIcon>} onChange={this._setTab} />
+			</Tabs>
+			{this.renderTab()}
+			<div>
+				<Toolbar primary={false} actionsRight={this.renderActions()} />
+			</div>
+		</Dialog>;
+	}
+}
+

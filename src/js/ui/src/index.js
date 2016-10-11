@@ -1011,11 +1011,11 @@ class NodeEditPane extends Component {
 
 	state = {attrs: []}
 
-	_setAttr = (attr) => {
+	_setAttr = (attr, afterStateChangeCallback) => {
 		const { node } = this.state.data;
 		const attrs = this.state.attrs.slice()
 		attrs.unshift(attr);
-		this.setState({attrs})
+		this.setState({attrs}, afterStateChangeCallback);
 		return this.conn().then(conn => conn.setNode({
 			id: node.id,
 			type: node.type.name,
@@ -1073,7 +1073,6 @@ class NodeEditPane extends Component {
 
 	render(){
 		const node = this.optimisticNode();
-		const status = this.state.pending ? 'saving' : 'saved';
 		return <div>
 			<Scroll>
 				<Toolbar
@@ -1086,7 +1085,6 @@ class NodeEditPane extends Component {
 				<div style={{margin:12}}>
 					{node.type.fields.map(f =>
 						<div key={f.name} style={{marginTop:18,marginBottom:18}}>
-							<div>{status}</div>
 							<Attr
 								node={node}
 								field={f}
@@ -1811,11 +1809,17 @@ class Chrome extends React.Component {
 		if( !this.state.appID ){
 			return <SelectApp userToken={this.state.userToken} onSelect={this._selectApp} onCreate={this._createApp} onError={this._toast}/>
 		}
+		let url = 'about:blank';
+		if (/ilios/.test(this.state.appID)) {
+			url = 'http://toolbox.oxdi.eu:3000';
+		} else if ( /fairlight/.test(this.state.appID)) {
+			url = 'http://google.com/';
+		}
 		return <App id={this.state.appID}
 					key={this.state.appID}
 					userToken={this.state.userToken}
 					sessionToken={this.state.sessionToken}
-					url="http://toolbox.oxdi.eu:3000/"
+					url={url}
 					onClickClose={this._removeAppID}
 					onClickLogout={this._removeUserToken}
 					onError={this._toast}
