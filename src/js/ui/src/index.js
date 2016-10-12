@@ -8,6 +8,7 @@ import uuid from 'node-uuid';
 
 import RichTextAttr from './RichTextAttr';
 import AttrToolbar from './AttrToolbar';
+import Sticky from './Sticky';
 
 const MAIN_WIDTH = 380;
 const FIELD_FRAGMENT = `
@@ -706,6 +707,8 @@ const TextAttr = ({node,field,onSetAttr,type}) => {
 			required={field.required}
 			{...opts}
 		/>
+		{field.hint ? <p className="md-caption">{field.hint}</p> : null}
+		<Divider />
 	</div>;
 }
 
@@ -720,8 +723,11 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 	return <div className="attr attr-boolean">
 		<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
 		<Switch
+			label={field.hint}
 			toggled={on}
-			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})} />
+			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})}
+		/>
+		<Divider />
 	</div>;
 }
 
@@ -823,17 +829,21 @@ class ImageAttr extends Component {
 		});
 	}
 
+	avatar(url){
+		return <Avatar className="avatar-amber" src={url} />;
+	}
+
 	render() {
 		const { node, field } = this.props;
 		const imgs = this.state.data.node[field.name].map(c =>
-			<UploadedImageCard
-				id={c.node.id}
+			<ListItem
 				key={c.node.id}
-				url={c.node.data.url}
-				name={c.node.name}
-				onRemove={() => this._remove(c.node.id)}
-				contentType={c.node.data.contentType} />
-		)
+				leftAvatar={this.avatar(c.node.data.url)}
+				rightIcon={<FontIcon onClick={() => this._remove(c.node.id)}>delete</FontIcon>}
+				primaryText={c.node.name}
+				secondaryText={c.node.data.contentType}
+			/>
+		);
 
 		let stats;
 		if (typeof progress === 'number') {
@@ -843,27 +853,29 @@ class ImageAttr extends Component {
 			];
 		}
 
-		return <div>
+		return <div className="attr attr-image">
+			<Sticky ref="sticky">
+				<div className="top">
+					<AttrToolbar title={field.friendlyName} icon="perm_media">
+						<FileUpload
+							multiple={false}
+							secondary
+							ref="upload"
+							label="Add"
+							iconChildren="add"
+							onLoadStart={this._setFile}
+							onProgress={this._handleProgress}
+							onLoad={this._onLoad}
+						/>
+					</AttrToolbar>
+				</div>
+			</Sticky>
 			{stats}
-			<CSSTransitionGroup
-				component="output"
-				className="md-card-list"
-				transitionName="upload"
-				transitionEnterTimeout={150}
-				transitionLeaveTimeout={150}
-				onClick={this._handleListClick}
-			>
+			<List>
 				{imgs}
-			</CSSTransitionGroup>
-			<FileUpload
-				multiple={false}
-				secondary
-				ref="upload"
-				label="Add Image"
-				onLoadStart={this._setFile}
-				onProgress={this._handleProgress}
-				onLoad={this._onLoad}
-			/>
+			</List>
+			{field.hint ? <p className="md-caption">{field.hint}</p> : null}
+			<Divider />
 		</div>;
 	}
 }
@@ -906,10 +918,14 @@ class EdgeAttr extends Component {
 		}
 	}
 
+	avatar(){
+		return <Avatar icon={<FontIcon>note</FontIcon>} suffix="color-1" />;
+	}
+
 	render() {
 		const { data } = this.state;
 		const {node, field} = this.props;
-		const ids = node.connections.filter(c => {
+		const items = node.connections.filter(c => {
 			if( c.name != field.edgeName ){ // ignore other connections
 				return false;
 			}
@@ -918,33 +934,42 @@ class EdgeAttr extends Component {
 			}
 			return true;
 		}).map(e => {
-			return e.node.id;
+			return data.nodes.find(n => n.id == e.node.id)
+		}).filter(node => {
+			return !!node;
+		}).map(node => {
+			return <ListItem
+				key={node.id}
+				primaryText={node.name}
+				secondaryText={node.type ? node.type.name : ''}
+				leftAvatar={this.avatar(node)}
+				rightIcon={<FontIcon onClick={(e) => {
+					e.preventDefault()
+					this._remove(node.id)
+				}}>delete</FontIcon>}
+			/>;
 		});
-		const chips = ids.map(id => {
-			const node = data.nodes.find(n => n.id == id);
-			const name = node ? node.name : 'unknown';
-			return <NodeChip key={id} id={id} label={name} onRemove={this._remove} />;
-		});
+		let typeName = 'Node';
+		if( field.edgeToType && field.edgeToType.name ){
+			typeName = field.edgeToType.name;
+		}
 		return <div className="attr attr-edge">
-			<AttrToolbar title={field.friendlyName || field.name} icon="collections" />
-			<CSSTransitionGroup
-				transitionName="opacity"
-				transitionEnterTimeout={150}
-				transitionLeaveTimeout={150}
-				component="div"
-				className="chip-list">
-					{chips}
-					<Autocomplete
-						label="Search for item..."
-						data={data.nodes}
-						dataLabel="name"
-						onAutocomplete={this._add}
-						clearOnAutocomplete
-						fullWidth
-						block
-						floatingLabel={false}
-					/>
-			</CSSTransitionGroup>
+			<AttrToolbar title={field.friendlyName || field.name} icon="collections">
+				<Autocomplete
+					icon={<FontIcon>search</FontIcon>}
+					label={`Find ${typeName}...`}
+					data={data.nodes}
+					dataLabel="name"
+					onAutocomplete={this._add}
+					clearOnAutocomplete
+					floatingLabel={false}
+				/>
+			</AttrToolbar>
+			<List>
+				{items}
+			</List>
+			{field.hint ? <p className="md-caption">{field.hint}</p> : null}
+			<Divider />
 		</div>;
 	}
 }
@@ -1182,7 +1207,7 @@ class NodeListPane extends Component {
 					<TableBody>
 						{nodes.map(n =>
 							<TableRow key={n.id} onClick={this._clickRow.bind(this, n)}>
-								<TableColumn>{n.name}</TableColumn>
+								<TableColumn>{n.name || n.id}</TableColumn>
 								<TableColumn> </TableColumn>
 							</TableRow>
 						)}

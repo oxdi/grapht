@@ -64,6 +64,7 @@ const BLOCK_TYPES = [
 	{name: 'Normal', type: 'unstyled', className:'editor-normal'},
 	{name: 'Heading', type: 'header-one', className:'editor-heading-one'},
 	{name: 'Subheading', type: 'header-two', className:'editor-heading-two'},
+	{name: 'Small', type: 'small', className:'editor-small'},
 	{name: 'Quote', type: 'blockquote', className:'editor-quote'},
 	{name: 'List', type: 'unordered-list-item', className:'editor-list-item'},
 

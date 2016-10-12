@@ -147,7 +147,7 @@ export default class Component extends React.Component {
 
 	_onQueryData = (data) => {
 		console.log(this.getQueryName(), 'incoming data', data);
-		this.setState({data});
+		this.setState({data}, this._afterUpdateData);
 		if( this.onQueryData ){
 			this.onQueryData(data);
 		}
@@ -155,6 +155,16 @@ export default class Component extends React.Component {
 
 	_onQueryError = (err) => {
 		this.toast(err)
+	}
+
+	_afterUpdateData() {
+		// FIXME: Sticky needs to update after an update, but this is a hack!
+		if( this.refs && this.refs.sticky && this.refs.sticky.updateBounds ){
+			setTimeout(() => {
+				this.refs.sticky.updateBounds();
+				console.log('updateBounds');
+			},1000);
+		}
 	}
 
 	_toast = (msg,action) => {
