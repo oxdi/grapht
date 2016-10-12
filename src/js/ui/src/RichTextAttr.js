@@ -1,6 +1,6 @@
 import React from 'react';
 import { PropTypes } from 'react';
-import {Editor, CompositeDecorator, Entity, Modifier, EditorState, RichUtils, convertToRaw, convertFromRaw} from 'draft-js';
+import {Editor, getDefaultKeyBinding, CompositeDecorator, Entity, Modifier, EditorState, RichUtils, convertToRaw, convertFromRaw} from 'draft-js';
 import {
 	FlatButton,
 	IconButton,
@@ -61,11 +61,21 @@ const decorator = new CompositeDecorator([
 ]);
 
 const BLOCK_TYPES = [
-	{name: 'Normal', type: 'unstyled'},
-	{name: 'Heading', type: 'header-one'},
-	{name: 'Subheading', type: 'header-two'},
-	{name: 'Quote', type: 'blockquote'},
+	{name: 'Normal', type: 'unstyled', className:'editor-normal'},
+	{name: 'Heading', type: 'header-one', className:'editor-heading-one'},
+	{name: 'Subheading', type: 'header-two', className:'editor-heading-two'},
+	{name: 'Quote', type: 'blockquote', className:'editor-quote'},
+	{name: 'List', type: 'unordered-list-item', className:'editor-list-item'},
+
 ];
+
+function getClassNameForBlock(contentBlock) {
+	const type = contentBlock.getType();
+	const blockType = BLOCK_TYPES.find(b => b.type == type);
+	if( blockType ){
+		return blockType.className;
+	}
+}
 
 export default class RichTextAttr extends React.Component {
 
@@ -190,6 +200,26 @@ export default class RichTextAttr extends React.Component {
 		this.setState({showToolMenu: true});
 	}
 
+	_handleKeyCommand = (command) => {
+		const {editorState} = this.state;
+		const newState = RichUtils.handleKeyCommand(editorState, command);
+		if (newState) {
+			this._onChange(newState);
+			return true;
+		}
+		return false;
+	}
+
+	_keyBindings = (e) => {
+		return getDefaultKeyBinding(e);
+	}
+
+	_onTab = (e) => {
+		e.preventDefault();
+		const {editorState} = this.state;
+		this._onChange(RichUtils.onTab(e, editorState, 2));
+	}
+
 	render() {
 		const {editorState} = this.state;
 		const selection = editorState.getSelection();
@@ -212,7 +242,7 @@ export default class RichTextAttr extends React.Component {
 							toggle={<IconButton onClick={this._showToolMenu} tooltipLabel="More options">more_vert</IconButton>}
 							close={this._hideToolMenu}
 						>
-							<ListItem primaryText="Clear Formatting"
+							<ListItem primaryText="Add Image"
 								leftIcon={<FontIcon>format_clear</FontIcon>}
 								onClick={this._clearFormatting}
 							/>
@@ -224,8 +254,22 @@ export default class RichTextAttr extends React.Component {
 					</AttrToolbar>
 				</div>
 			</Sticky>
-			<Editor ref="editor" stripPastedStyles spellCheck editorState={editorState} onChange={this._onChange} />
-			<LinkDialog isOpen={this.state.showLinkDialog} onCancel={this._hideLinkDialog} onSetLink={this._setLink} />
+			<Editor
+				ref="editor"
+				stripPastedStyles
+				spellCheck
+				editorState={editorState}
+				onChange={this._onChange}
+				handleKeyCommand={this._handleKeyCommand}
+				blockStyleFn={getClassNameForBlock}
+				keyBindingFn={this._keyBindings}
+				onTab={this._onTab}
+			/>
+			<LinkDialog
+				isOpen={this.state.showLinkDialog}
+				onCancel={this._hideLinkDialog}
+				onSetLink={this._setLink}
+			/>
 			{field.hint ? <p className="md-caption">{field.hint}</p> : null}
 			<Divider />
 		</div>;
