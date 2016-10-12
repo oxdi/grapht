@@ -231,7 +231,7 @@ export default class RichTextAttr extends React.Component {
 		const blockItem = BLOCK_TYPES.find(t => t.type == blockType);
 		const {field} = this.props;
 		const flex = {flex:1};
-		return <div className="attr attr-richtext" style={{overflow:'hidden'}}>
+		return <div className="attr attr-richtext">
 			<Sticky ref="sticky">
 				<div className="top">
 					<AttrToolbar title={field.friendlyName} icon="art_track">

@@ -49,13 +49,13 @@ import {
 	Tabs,
 	Tab,
 	Snackbar,
-	List, ListItem,
 	NavigationDrawer,
 	Paper,
 	CircularProgress,
 	Subheader,
 	Divider,
 } from 'react-md';
+import { List, ListItem, ListItemControl } from 'react-md/lib/Lists';
 import {
 	ExpansionPanel,
 	ExpansionList
@@ -715,18 +715,26 @@ const TextAttr = ({node,field,onSetAttr,type}) => {
 const BooleanAttr = ({node,field,onSetAttr}) => {
 	let attr = node.attrs.find(attr => attr.name == field.name) || {};
 	let on = false;
-       	if( attr ){
+	if( attr ){
 		on = attr.value === true ||
 			attr.value === 1 ||
 			(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
 	}
+	const control = <Switch
+		label={field.hint}
+		toggled={on}
+		onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})}
+	/>;
+	const statusText = on ? 'Enabled' : 'Disabled';
 	return <div className="attr attr-boolean">
 		<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
-		<Switch
-			label={field.hint}
-			toggled={on}
-			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})}
-		/>
+		<List>
+			<ListItemControl
+				primaryText={field.hint || field.friendlyName}
+				secondaryText={statusText}
+				secondaryAction={control}
+			/>
+		</List>
 		<Divider />
 	</div>;
 }
