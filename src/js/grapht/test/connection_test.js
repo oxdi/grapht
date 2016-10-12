@@ -1442,3 +1442,21 @@ test("RichText type", function(t){
 		})
 	})
 });
+
+test("mutations", function(t){
+	return admin.query(`
+		mutations {
+			time
+			uid
+			role
+			query
+		}
+	`).then(function(res){
+		var m = res.mutations[0];
+		t.ok(m.time, 'has time');
+		t.ok(m.uid, 'has uid');
+		t.ok(m.role, 'has role');
+		t.ok(m.query, 'has query');
+		return true;
+	})
+});

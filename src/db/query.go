@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/graphql-go/graphql"
 )
@@ -98,6 +99,7 @@ type GraphqlContext struct {
 	attrInputObject       *graphql.InputObject
 	imageObject           *graphql.Object
 	edgeObject            *graphql.Object
+	mutationObject        *graphql.Object
 	connectionObject      *graphql.Object
 	nodeInterface         *graphql.Interface
 	typeEnum              *graphql.Enum
@@ -1314,6 +1316,113 @@ func (cxt *GraphqlContext) SetNodeMutation() *graphql.Field {
 	}
 }
 
+func (cxt *GraphqlContext) MutationObject() *graphql.Object {
+	if cxt.mutationObject != nil {
+		return cxt.mutationObject
+	}
+	cxt.mutationObject = graphql.NewObject(graphql.ObjectConfig{
+		Name:   "Mutation",
+		Fields: graphql.Fields{},
+	})
+	cxt.mutationObject.AddFieldConfig("time", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "time of mutation",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			m, ok := p.Source.(*M)
+			if !ok {
+				return nil, castError("time", p.Source, "*M")
+			}
+			return m.Timestamp, nil
+		},
+	})
+	cxt.mutationObject.AddFieldConfig("uid", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "who made the mutation",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			m, ok := p.Source.(*M)
+			if !ok {
+				return nil, castError("uid", p.Source, "*M")
+			}
+			uid, ok := m.Claims["uid"]
+			if !ok {
+				return "-", nil
+			}
+			return uid, nil
+		},
+	})
+	cxt.mutationObject.AddFieldConfig("role", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "who made the mutation",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			m, ok := p.Source.(*M)
+			if !ok {
+				return nil, castError("role", p.Source, "*M")
+			}
+			role, ok := m.Claims["role"]
+			if !ok {
+				return "-", nil
+			}
+			return role, nil
+		},
+	})
+	cxt.mutationObject.AddFieldConfig("query", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "mutation query",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			m, ok := p.Source.(*M)
+			if !ok {
+				return nil, castError("role", p.Source, "*M")
+			}
+			return m.Query, nil
+		},
+	})
+	return cxt.mutationObject
+}
+
+func (cxt *GraphqlContext) GetMutations() *graphql.Field {
+	return &graphql.Field{
+		Description: "fetch mutation history",
+		Type:        graphql.NewList(cxt.MutationObject()),
+		Args: graphql.FieldConfigArgument{
+			"after": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+			"before": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+			"first": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			limit := struct {
+				After  *time.Time
+				Before *time.Time
+				First  int
+			}{}
+			err := fill(&limit, p.Args)
+			if err != nil {
+				return nil, err
+			}
+			mutations, err := cxt.conn.db.GetMutations(limit.After, limit.Before)
+			if err != nil {
+				return nil, err
+			}
+			out := []*M{}
+			n := 10
+			for i := len(mutations) - 1; i >= 0; i-- {
+				n--
+				if n == 0 {
+					break
+				}
+				out = append(out, mutations[i])
+			}
+			return out, nil
+		},
+	}
+
+}
+
 func (cxt *GraphqlContext) AddQuery(name string, field *graphql.Field) {
 	cxt.fields[name] = field
 }
@@ -1353,6 +1462,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("edges", cxt.GetEdges())
 	cxt.AddQuery("type", cxt.GetType())
 	cxt.AddQuery("types", cxt.GetTypes())
+	cxt.AddQuery("mutations", cxt.GetMutations())
 	cxt.AddMutation("setType", cxt.SetTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetNodeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())

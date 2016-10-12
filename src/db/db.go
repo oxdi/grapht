@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	"fmt"
 	"graph"
 	"io"
 	"os"
@@ -15,7 +16,7 @@ type M struct {
 	Timestamp time.Time              `json:"t,omitempty"`
 	Claims    Claims                 `json:"c,omitempty"`
 	Query     string                 `json:"q,omitempty"`
-	Params    map[string]interface{} `json:"p:omitempty"`
+	Params    map[string]interface{} `json:"p,omitempty"`
 }
 
 type DB struct {
@@ -23,6 +24,7 @@ type DB struct {
 	sync.RWMutex
 	conns []*Conn
 	log   io.ReadWriter
+	path  string
 }
 
 func (db *DB) commit(g *graph.Graph, mutations []*M) error {
@@ -77,14 +79,21 @@ func (db *DB) apply(m *M) error {
 		return err
 	}
 	defer c.Close()
-	c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
+	err := c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
+	if err != nil {
+		fmt.Println("ERROR during apply", err)
+	}
 	db.g = c.g
 	return nil
 }
 
 // replay reads each log entry, decodes it and applies it
 func (db *DB) replay() error {
-	dec := json.NewDecoder(db.log)
+	return db.decode(db.log, db.apply)
+}
+
+func (db *DB) decode(log io.Reader, apply func(m *M) error) error {
+	dec := json.NewDecoder(log)
 	for {
 		var m M
 		if err := dec.Decode(&m); err == io.EOF {
@@ -92,12 +101,28 @@ func (db *DB) replay() error {
 		} else if err != nil {
 			return err
 		}
-		err := db.apply(&m)
+		err := apply(&m)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (db *DB) GetMutations(before *time.Time, after *time.Time) ([]*M, error) {
+	muts := []*M{}
+	log, err := db.newLogReader()
+	if err != nil {
+		return nil, err
+	}
+	err = db.decode(log, func(m *M) error {
+		muts = append(muts, m)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return muts, nil
 }
 
 func (db *DB) Close() error {
@@ -111,15 +136,12 @@ func (db *DB) Close() error {
 	return nil
 }
 
-func New(w io.ReadWriter) (*DB, error) {
-	db := &DB{
-		g:   graph.New(),
-		log: w,
-	}
-	if err := db.replay(); err != nil {
+func (db *DB) newLogReader() (io.Reader, error) {
+	log, err := os.Open(db.path)
+	if err != nil {
 		return nil, err
 	}
-	return db, nil
+	return log, nil
 }
 
 func Open(path string) (*DB, error) {
@@ -130,10 +152,17 @@ func Open(path string) (*DB, error) {
 		}
 		f.Close()
 	}
-
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
-	return New(f)
+	db := &DB{
+		g:    graph.New(),
+		log:  f,
+		path: path,
+	}
+	if err := db.replay(); err != nil {
+		return nil, err
+	}
+	return db, nil
 }

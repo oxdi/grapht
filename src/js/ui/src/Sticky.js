@@ -146,28 +146,6 @@ export default class ReactStickyState extends Component {
     return this.refs.el.getBoundingClientRect();
   }
 
-  getRestrictHeight() {
-    var child = this.refs.wrapper || this.refs.el;
-    var elem = child.parentNode;
-    if(!elem){
-      return 0;
-    }
-    var elemRect = getAbsolutBoundingRect(elem);
-    return elemRect.height + (elemRect.top || 0);
-  }
-
-  updateHeight = () => {
-    const height = this.getRestrictHeight();
-    const restrict = assign({}, this.state.restrict, {
-      height: height,
-      bottom: height,
-    });
-    if( this.state.restrict.height != restrict.height ){
-      this.setState({restrict});
-      console.log('new restrict', restrict);
-    }
-  }
-
   getBounds(noCache) {
 
     var clientRect = this.getBoundingClientRect();
@@ -504,9 +482,16 @@ export default class ReactStickyState extends Component {
 
   componentDidMount() {
     setTimeout(() => this.initialize(), 1);
+    this.timer = setInterval(() => {
+      if( this.timer ){
+        this.updateBounds();
+      }
+    }, 1000);
   }
 
   componentWillUnmount() {
+    clearInterval(this.timer);
+    this.timer = null;
     this._shouldComponentUpdate = false;
     this.removeSrollHandler();
     this.removeResizeHandler();

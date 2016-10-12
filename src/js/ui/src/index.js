@@ -5,6 +5,7 @@ import classnames from 'classnames';
 import { render } from 'react-dom';
 import WebFont from 'webfontloader';
 import uuid from 'node-uuid';
+import moment from 'moment';
 
 import RichTextAttr from './RichTextAttr';
 import AttrToolbar from './AttrToolbar';
@@ -299,6 +300,11 @@ class AppSidebar extends Component {
 		this.props.closeSidebarIfFloating();
 	}
 
+	_clickHistory = () => {
+		this.go('MUTATION_LIST');
+		this.props.closeSidebarIfFloating();
+	}
+
 	_clickContent = (type) => {
 		this.go('NODE_LIST', {typeID: type.id});
 		this.props.closeSidebarIfFloating();
@@ -313,7 +319,7 @@ class AppSidebar extends Component {
 				<ListItem primaryText="Settings" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
 					<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
 				]} />
-				<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} />
+				<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} onClick={this._clickHistory} />
 				<ListItem primaryText="Logout" leftIcon={<FontIcon>exit_to_app</FontIcon>} onClick={this._clickLogout} />
 				<ListItem primaryText="Switch App" leftIcon={<FontIcon>shuffle</FontIcon>} onClick={this._clickClose} />
 			</List>
@@ -638,6 +644,49 @@ class TypeEditPane extends Component {
 	}
 }
 
+class MutationListPane extends Component {
+
+	getActionName(query){
+		const re = /{\s*(?:[a-zA-Z0-9]+:)?([a-zA-Z0-9]+)/;
+		const matches = query.match(re);
+		if( matches ){
+			return matches[1];
+		}
+		return '';
+	}
+
+	render(){
+		const {mutations} = this.state.data;
+		const rows = mutations.map(m =>
+			<TableRow key={m.time}>
+				<TableColumn>{moment(m.time).fromNow()}</TableColumn>
+				<TableColumn>{m.uid}</TableColumn>
+				<TableColumn>{this.getActionName(m.query)}</TableColumn>
+			</TableRow>
+		);
+		return <div>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title="History"
+				/>
+				<DataTable>
+					<TableHeader>
+						<TableRow>
+							<TableColumn>Time</TableColumn>
+							<TableColumn>User</TableColumn>
+							<TableColumn>Action</TableColumn>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{rows}
+					</TableBody>
+				</DataTable>
+			</Scroll>
+		</div>
+	}
+}
+
 class TypeListPane extends Component {
 
 	_clickAdd = () => {
@@ -655,7 +704,7 @@ class TypeListPane extends Component {
 		return <ListItem
 			key={t.name}
 			leftIcon={<FontIcon>assignment</FontIcon>}
-			primaryText={t.name}
+			primaryText={t.name || t.id}
 			secondaryText="Custom Type"
 			onClick={() => this.go('TYPE_EDIT', {id:t.id})}
 		/>
@@ -679,64 +728,93 @@ class TypeListPane extends Component {
 	}
 }
 
-const TextAttr = ({node,field,onSetAttr,type}) => {
-	let opts = {};
-	if( field.textLines > 1 ){
-		opts.rows = field.textLines;
-		opts.maxRows = field.textLineLimit > 1 ? field.textLineLimit : -1;
+class TextAttr extends React.Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetAttr: PropTypes.func.isRequired,
+		type: PropTypes.string,
 	}
-	if( type ){
-		opts.type = type;
+
+	render(){
+		const {node,field,onSetAttr,type} = this.props;
+		let opts = {};
+		if( field.textLines > 1 ){
+			opts.rows = field.textLines;
+			opts.maxRows = field.textLineLimit > 1 ? field.textLineLimit : -1;
+		}
+		if( type ){
+			opts.type = type;
+		}
+		let attr = node.attrs.find(attr => attr.name == field.name) || {};
+		let iconName = 'wrap_text';
+		if( field.textLineLimit < 2 ){
+			iconName = 'short_text';
+		}
+		if( type == 'number' ){
+			iconName = 'timeline';
+		}
+		return <div className="attr attr-text">
+			<Sticky ref="sticky">
+				<div className="top">
+					<AttrToolbar title={field.friendlyName || field.name} icon={iconName} />
+				</div>
+			</Sticky>
+			<TextField
+				onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
+				value={attr.value || ''}
+				maxLength={field.textCharLimit}
+				block
+				placeholder={field.friendlyName}
+				required={field.required}
+				{...opts}
+			/>
+			{field.hint ? <p className="md-caption">{field.hint}</p> : null}
+			<Divider />
+		</div>;
 	}
-	let attr = node.attrs.find(attr => attr.name == field.name) || {};
-	let iconName = 'wrap_text';
-	if( field.textLineLimit < 2 ){
-		iconName = 'short_text';
-	}
-	if( type == 'number' ){
-		iconName = 'timeline';
-	}
-	return <div className="attr attr-text">
-		<AttrToolbar title={field.friendlyName || field.name} icon={iconName} />
-		<TextField
-			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
-			value={attr.value || ''}
-			maxLength={field.textCharLimit}
-			block
-			placeholder={field.friendlyName}
-			required={field.required}
-			{...opts}
-		/>
-		{field.hint ? <p className="md-caption">{field.hint}</p> : null}
-		<Divider />
-	</div>;
 }
 
-const BooleanAttr = ({node,field,onSetAttr}) => {
-	let attr = node.attrs.find(attr => attr.name == field.name) || {};
-	let on = false;
-	if( attr ){
-		on = attr.value === true ||
-			attr.value === 1 ||
-			(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
+class BooleanAttr extends React.Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetAttr: PropTypes.func.isRequired,
 	}
-	const control = <Switch
-		label={field.hint}
-		toggled={on}
-		onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})}
-	/>;
-	const statusText = on ? 'Enabled' : 'Disabled';
-	return <div className="attr attr-boolean">
-		<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
-		<List>
-			<ListItemControl
-				primaryText={field.hint || field.friendlyName}
-				secondaryText={statusText}
-				secondaryAction={control}
-			/>
-		</List>
-		<Divider />
-	</div>;
+
+	render(){
+		const {node,field,onSetAttr} = this.props;
+		let attr = node.attrs.find(attr => attr.name == field.name) || {};
+		let on = false;
+		if( attr ){
+			on = attr.value === true ||
+				attr.value === 1 ||
+				(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
+		}
+		const control = <Switch
+			label={field.hint}
+			toggled={on}
+			onChange={(v) => onSetAttr({name:field.name,value:v.toString(),enc:'UTF8'})}
+		/>;
+		const statusText = on ? 'Enabled' : 'Disabled';
+		return <div className="attr attr-boolean">
+			<Sticky ref="sticky">
+				<div className="top">
+					<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
+				</div>
+			</Sticky>
+			<List>
+				<ListItemControl
+					primaryText={field.hint || field.friendlyName || ''}
+					secondaryText={statusText}
+					secondaryAction={control}
+				/>
+			</List>
+			<Divider />
+		</div>;
+	}
 }
 
 class UploadedImageCard extends PureComponent {
@@ -848,8 +926,8 @@ class ImageAttr extends Component {
 				key={c.node.id}
 				leftAvatar={this.avatar(c.node.data.url)}
 				rightIcon={<FontIcon onClick={() => this._remove(c.node.id)}>delete</FontIcon>}
-				primaryText={c.node.name}
-				secondaryText={c.node.data.contentType}
+				primaryText={c.node.name || ''}
+				secondaryText={c.node.data && c.node.data.contentType || ''}
 			/>
 		);
 
@@ -926,6 +1004,10 @@ class EdgeAttr extends Component {
 		}
 	}
 
+	_clickConnection = (node) => {
+		this.go('NODE_EDIT', {id: node.id});
+	}
+
 	avatar(){
 		return <Avatar icon={<FontIcon>note</FontIcon>} suffix="color-1" />;
 	}
@@ -933,24 +1015,29 @@ class EdgeAttr extends Component {
 	render() {
 		const { data } = this.state;
 		const {node, field} = this.props;
-		const items = node.connections.filter(c => {
+		const items = node.connections.reduce((nodes,c) => {
 			if( c.name != field.edgeName ){ // ignore other connections
-				return false;
+				return nodes;
 			}
-			if( c.direction != field.edgeDirection ){
-				return false;
+			if( field.edgeDirection && c.direction != field.edgeDirection ){ // ignore other directions
+				return nodes;
 			}
-			return true;
-		}).map(e => {
-			return data.nodes.find(n => n.id == e.node.id)
-		}).filter(node => {
-			return !!node;
-		}).map(node => {
+			const node = data.nodes.find(n => n.id == c.node.id);
+			if( !node ){ // do not have node in master list...yet
+				return nodes;
+			}
+			if( nodes.find(n => n.id == node.id) ){ // uniq
+				return nodes;
+			}
+			nodes.push(node);
+			return nodes;
+		},[]).map(node => {
 			return <ListItem
 				key={node.id}
-				primaryText={node.name}
+				primaryText={node.name || node.id || ''}
 				secondaryText={node.type ? node.type.name : ''}
 				leftAvatar={this.avatar(node)}
+				onClick={() => this._clickConnection(node)}
 				rightIcon={<FontIcon onClick={(e) => {
 					e.preventDefault()
 					this._remove(node.id)
@@ -962,17 +1049,21 @@ class EdgeAttr extends Component {
 			typeName = field.edgeToType.name;
 		}
 		return <div className="attr attr-edge">
-			<AttrToolbar title={field.friendlyName || field.name} icon="collections">
-				<Autocomplete
-					icon={<FontIcon>search</FontIcon>}
-					label={`Find ${typeName}...`}
-					data={data.nodes}
-					dataLabel="name"
-					onAutocomplete={this._add}
-					clearOnAutocomplete
-					floatingLabel={false}
-				/>
-			</AttrToolbar>
+			<Sticky ref="sticky">
+				<div className="top">
+					<AttrToolbar title={field.friendlyName || field.name} icon="collections">
+						<Autocomplete
+							icon={<FontIcon>search</FontIcon>}
+							label={`Find ${typeName}...`}
+							data={data.nodes}
+							dataLabel="name"
+							onAutocomplete={this._add}
+							clearOnAutocomplete
+							floatingLabel={false}
+						/>
+					</AttrToolbar>
+				</div>
+			</Sticky>
 			<List>
 				{items}
 			</List>
@@ -1639,6 +1730,14 @@ class App extends React.Component {
 		};
 		console.log('render:', this.props.pane, props)
 		switch(this.props.pane){
+			case 'MUTATION_LIST':    return <MutationListPane {...props} query={`
+				mutations {
+					time
+					uid
+					role
+					query
+				}
+			`}/>;
 			case 'TYPE_LIST':    return <TypeListPane {...props} query={`
 				types {
 					id
@@ -1823,7 +1922,9 @@ class Chrome extends React.Component {
 		}
 		const autohide = !(toasts[0].action && toasts[0].action.onClick);
 		this.setState({toasts, autohide});
-		console.error('toast:', err);
+		if( !(/unpublished|offline/).test(msg) ){
+			console.error('toast:', err);
+		}
 	}
 
 	_createApp = ({id}) => {
