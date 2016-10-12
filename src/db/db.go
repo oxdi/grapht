@@ -6,6 +6,7 @@ import (
 	"graph"
 	"io"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -79,9 +80,13 @@ func (db *DB) apply(m *M) error {
 		return err
 	}
 	defer c.Close()
-	err := c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
-	if err != nil {
-		fmt.Println("ERROR during apply", err)
+	result := c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
+	if len(result.Errors) > 0 {
+		striper := regexp.MustCompile(`\n`)
+		fmt.Println("\nfailed to apply mutation", striper.ReplaceAllString(m.Query, " "), m.Params)
+		for _, err := range result.Errors {
+			fmt.Println("|--", err)
+		}
 	}
 	db.g = c.g
 	return nil

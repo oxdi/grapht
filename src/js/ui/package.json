@@ -12,6 +12,7 @@
   "dependencies": {
     "classnames": "^2.2.5",
     "draft-js": "^0.9.1",
+    "immutable": "^3.8.1",
     "moment": "^2.15.1",
     "node-uuid": "^1.4.7",
     "normalize.css": "^4.2.0",

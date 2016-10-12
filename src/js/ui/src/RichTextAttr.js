@@ -1,6 +1,17 @@
 import React from 'react';
 import { PropTypes } from 'react';
-import {Editor, getDefaultKeyBinding, CompositeDecorator, Entity, Modifier, EditorState, RichUtils, convertToRaw, convertFromRaw} from 'draft-js';
+import {
+	Editor,
+	DefaultDraftBlockRenderMap,
+	getDefaultKeyBinding,
+	CompositeDecorator,
+	Entity,
+	Modifier,
+	EditorState,
+	RichUtils,
+	convertToRaw,
+	convertFromRaw
+} from 'draft-js';
 import {
 	FlatButton,
 	IconButton,
@@ -14,6 +25,7 @@ import {
 	ListItem,
 	Divider,
 } from 'react-md';
+import Immutable from 'immutable';
 import SelectField from 'react-md/lib/SelectFields';
 import Autocomplete from 'react-md/lib/Autocompletes';
 import AttrToolbar from './AttrToolbar';
@@ -69,6 +81,12 @@ const BLOCK_TYPES = [
 	{name: 'List', type: 'unordered-list-item', className:'editor-list-item'},
 
 ];
+
+const blockRenderMap = DefaultDraftBlockRenderMap.merge(Immutable.Map({
+	'small': {
+		element: 'div'
+	}
+}));
 
 function getClassNameForBlock(contentBlock) {
 	const type = contentBlock.getType();
@@ -263,6 +281,7 @@ export default class RichTextAttr extends React.Component {
 				onChange={this._onChange}
 				handleKeyCommand={this._handleKeyCommand}
 				blockStyleFn={getClassNameForBlock}
+				blockRenderMap={blockRenderMap}
 				keyBindingFn={this._keyBindings}
 				onTab={this._onTab}
 			/>

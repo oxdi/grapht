@@ -43,14 +43,12 @@ export default class Component extends React.Component {
 	}
 
 	componentWillUnmount(){
-		console.log(this.getQueryName(), 'unmounting');
 		this.mounted = false;
 		this.unsubscribe();
 	}
 
 	componentWillReceiveProps(nextProps,nextContext){
 		if( this.props.query != nextProps.query ){
-			console.log('resub');
 			this.unsubscribe().then(() => this.subscribe(nextProps.query));
 		}
 	}
@@ -122,7 +120,6 @@ export default class Component extends React.Component {
 	}
 
 	_onUnsubscribe = () => {
-		console.log(this.getQueryName(), 'unsubscribed');
 		this.query = null;
 		if( this.mounted ){
 			this.setState({data:null});
@@ -141,12 +138,10 @@ export default class Component extends React.Component {
 		query.on('data', this._onQueryData);
 		query.on('error', this._onQueryError);
 		this.query = query;
-		console.log(this.getQueryName(), 'subscribed', query.query);
 
 	}
 
 	_onQueryData = (data) => {
-		console.log(this.getQueryName(), 'incoming data', data);
 		this.setState({data}, this._afterUpdateData);
 		if( this.onQueryData ){
 			this.onQueryData(data);
@@ -162,7 +157,6 @@ export default class Component extends React.Component {
 		if( this.refs && this.refs.sticky && this.refs.sticky.updateBounds ){
 			setTimeout(() => {
 				this.refs.sticky.updateBounds();
-				console.log('updateBounds');
 			},1000);
 		}
 	}
