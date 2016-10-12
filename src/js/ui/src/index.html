@@ -12,46 +12,6 @@
 		<style>
 			{CSS}
 		</style>
-	</head>
-	<body>
-		<div id="app"></div>
-		<script>
-			{JS}
-		</script>
-		<style>
-			.attr .md-text-field-container.block {
-				padding-left: 0 !important;
-				padding-right: 0 !important;
-			}
-			.md-snackbar {
-				left:0 !important;
-				right:0 !important;
-				max-width: none !important;
-				min-width: auto !important;
-				transform: inherit !important;
-				border-radius: 0 !important;
-			}
-			.field .md-panel-controls {
-				display:none !important;
-			}
-			body {
-				padding-bottom:1px;
-			}
-			.attr-item .md-icon-btn {
-				padding: 4px;
-				font-size: inherit;
-				width:32px;
-				height:32px;
-				color: #777;
-			}
-			.margin-left-auto {
-				margin-left: auto;
-			}
-
-		</style>
-		<script>
-			setTimeout(function(){window.scrollTo(0,1)},0);
-		</script>
 		<style>
 			.sticky {
 			  position: -webkit-sticky;
@@ -74,6 +34,55 @@
 			.sticky.sticky-fixed.is-absolute{
 			  position: absolute;
 			}
+			.top {
+				top: 0;
+			}
+			.stuck {
+				background: red;
+				width: 100%;
+			}
 		</style>
+		<style>
+			.attr {
+				margin:12px;
+			}
+			.attr-toolbar {
+				top:0;
+				background:white;
+				width: 360px;
+			}
+			.attr .md-text-field-container.block {
+				padding-left: 0 !important;
+				padding-right: 0 !important;
+			}
+			.md-snackbar {
+				left:0 !important;
+				right:0 !important;
+				max-width: none !important;
+				min-width: auto !important;
+				transform: inherit !important;
+				border-radius: 0 !important;
+			}
+			.field .md-panel-controls {
+				display:none !important;
+			}
+			.attr-item .md-icon-btn {
+				padding: 4px;
+				font-size: inherit;
+				width:32px;
+				height:32px;
+				color: #777;
+			}
+			.margin-left-auto {
+				margin-left: auto;
+			}
+
+		</style>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script>
+			{JS}
+		</script>
 	</body>
 </html>

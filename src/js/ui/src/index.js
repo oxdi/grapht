@@ -98,8 +98,6 @@ const FloatingAddButton = (props) => <FloatingButton
 	{...props}
 >add</FloatingButton>;
 
-
-
 const Scroll = (props) => {
 	let style = {
 		position: 'absolute',
@@ -107,7 +105,8 @@ const Scroll = (props) => {
 		left:0,
 		bottom:0,
 		right:0,
-		overflow: 'scroll',
+		overflow: 'auto',
+		WebkitOverflowScrolling: 'touch',
 	};
 	return <div style={style}>
 		{props.children}
@@ -696,7 +695,7 @@ const TextAttr = ({node,field,onSetAttr,type}) => {
 	if( type == 'number' ){
 		iconName = 'timeline';
 	}
-	return <div>
+	return <div className="attr attr-text">
 		<AttrToolbar title={field.friendlyName || field.name} icon={iconName} />
 		<TextField
 			onChange={(v) => onSetAttr({name:field.name,value:v,enc:'UTF8'})}
@@ -718,7 +717,7 @@ const BooleanAttr = ({node,field,onSetAttr}) => {
 			attr.value === 1 ||
 			(/^(true|yes|y|t|on|1)$/i).test((attr.value || '').toString());
 	}
-	return <div>
+	return <div className="attr attr-boolean">
 		<AttrToolbar title={field.friendlyName} icon="playlist_add_check" />
 		<Switch
 			toggled={on}
@@ -926,7 +925,7 @@ class EdgeAttr extends Component {
 			const name = node ? node.name : 'unknown';
 			return <NodeChip key={id} id={id} label={name} onRemove={this._remove} />;
 		});
-		return <div>
+		return <div className="attr attr-edge">
 			<AttrToolbar title={field.friendlyName || field.name} icon="collections" />
 			<CSSTransitionGroup
 				transitionName="opacity"
@@ -1110,22 +1109,17 @@ class NodeEditPane extends Component {
 						<IconButton onClick={this._done}>done</IconButton>
 					</div>}
 				/>
-				<div style={{margin:12}}>
-					{node.type.fields.map(f =>
-						<div key={f.name} className="attr" style={{marginTop:18,marginBottom:18}}>
-							<Attr
-								node={node}
-								field={f}
-								attr={node.attrs.find(a => a.name == f.name)}
-								onSetAttr={this._setAttr}
-								onSetEdge={this._setEdge}
-								onRemoveEdge={this._removeEdge}
-							/>
-							{f.hint ? <p className="md-caption">{f.hint}</p> : null}
-							<Divider />
-						</div>
-					)}
-				</div>
+				{node.type.fields.map(f =>
+					<Attr
+						key={f.name}
+						node={node}
+						field={f}
+						attr={node.attrs.find(a => a.name == f.name)}
+						onSetAttr={this._setAttr}
+						onSetEdge={this._setEdge}
+						onRemoveEdge={this._removeEdge}
+					/>
+				)}
 				<div style={{height:250}}></div>
 			</Scroll>
 		</div>

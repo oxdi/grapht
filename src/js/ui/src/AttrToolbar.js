@@ -1,13 +1,12 @@
 import React from 'react';
 import {FontIcon} from 'react-md';
-import Sticky from 'react-sticky-state';
 
 const AttrToolbar = ({icon,title,children}) => {
 	const flex = {flex:1};
 	const tools = React.Children.map(children, child => <div className="attr-item" style={flex}>
 			{child}
 	</div>);
-	return <Sticky debug={true}>
+	return <div className="attr-toolbar">
 		<div style={{display:'flex',flexDirection:'row',alignItems:'center'}}>
 			<div className="left" style={{flex:100, display:'flex', alignItems:'center'}}>
 				<div style={{flex:1}}><FontIcon style={{fontSize:36}}>{icon}</FontIcon></div>
@@ -17,7 +16,7 @@ const AttrToolbar = ({icon,title,children}) => {
 				{tools}
 			</div>
 		</div>
-	</Sticky>;
+	</div>;
 };
 
 
