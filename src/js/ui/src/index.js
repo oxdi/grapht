@@ -91,6 +91,37 @@ const BASE_UNITS = ['none'].concat(UNITS.sections["SI Base Units"].map(o => o.va
 import {Client} from 'grapht';
 let client = new Client({host:window.location.host});
 window.graphtClient = client;
+// FIXME: this probably should not be here!
+// returns appid
+function bootstrap(userToken, appID){
+	return client.connect({userToken, appID}).then(conn => {
+		return conn.setType({
+			id: uuid.v1(),
+			name: "App",
+			fields: [
+				{name:"name", friendlyName:"Name", type:"Text", hint:"Global name of the project"},
+			]
+		})
+		.then(({id}) => conn.setNode({
+			id: uuid.v1(),
+			type: "App",
+		}))
+		.then(() => conn.setType({
+			id: uuid.v1(),
+			name: "Image",
+			fields: [
+				{name:"name", friendlyName:"Title", type:"Text", hint:"The title of the image (defaults to the original filename of the uploaded image if available)"},
+				{name:"data", friendlyName:"Image Data", type:"Image", hint:"The actual image data"},
+				{name:"caption", friendlyName:"Caption", type:"Text", hint:"Short description of the image, may be used in galleries or as alt text"},
+			]
+		}))
+		.then(() => conn.commit())
+		.then(() => conn.close())
+		.then(() => {
+			return {id:appID};
+		});
+	});
+}
 
 const FloatingAddButton = (props) => <FloatingButton
 	style={{position:'absolute'}}
@@ -315,13 +346,22 @@ class AppSidebar extends Component {
 		this.props.closeSidebarIfFloating();
 	}
 
+	_clickGlobals = (type) => {
+		this.go('GLOBAL_EDIT');
+		this.props.closeSidebarIfFloating();
+	}
+
 	render(){
+		const contentTypes = this.state.data.types.filter(t => {
+			return t.name != "App";
+		}).map(t =>
+			 <ListItem key={t.id} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
+		);
 		return <Scroll>
 			<List>
-				<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={this.state.data.types.map(t =>
-					<ListItem key={t.name} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
-				)} />
-				<ListItem primaryText="Settings" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
+				<ListItem primaryText="Content" leftIcon={<FontIcon>collections</FontIcon>} initiallyOpen={true} nestedItems={contentTypes} />
+				<ListItem primaryText="Setup" leftIcon={<FontIcon>settings</FontIcon>} initiallyOpen={false} nestedItems={[
+					<ListItem key="options" primaryText="Options" onClick={this._clickGlobals} />,
 					<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
 				]} />
 				<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} onClick={this._clickHistory} />
@@ -741,7 +781,7 @@ class TypeListPane extends Component {
 
 	typeItem(t){
 		return <ListItem
-			key={t.name}
+			key={t.id}
 			leftIcon={<FontIcon>assignment</FontIcon>}
 			primaryText={t.name || t.id}
 			secondaryText="Custom Type"
@@ -1192,6 +1232,43 @@ class Attr extends React.Component {
 	}
 }
 
+class GlobalEditPane extends Component {
+
+	render(){
+		const { nodes } = this.state.data;
+		const node = nodes[0];
+		if( !node ){
+			return <section>
+				<FlatButton onClick={this._createGlobalAppType} label="Enable Global Options" />
+			</section>;
+		}
+		return <NodeEditPane id={node.id} query={`
+			node(id:"${node.id}"){
+				id
+				type {
+					id
+					name
+					fields {
+						${FIELD_FRAGMENT}
+					}
+				}
+				attrs {
+					name
+					value
+					enc
+				}
+				connections {
+					name
+					direction
+					node {
+						id
+					}
+				}
+			}
+		`} />;
+	}
+}
+
 class NodeEditPane extends Component {
 
 	static propTypes = {
@@ -1525,6 +1602,7 @@ class Login extends React.Component {
 		})
 	}
 
+
 	_register = (e) => {
 		if( e.preventDefault ){
 			e.preventDefault();
@@ -1537,13 +1615,12 @@ class Login extends React.Component {
 			return client.createApp({
 				userToken,
 				id: this.state.appID,
-			}).catch(err => {
-				this.onError(`Failed to create app: ${err.message}`);
-			}).then(() => {
-				this.onAuthenticated(userToken);
 			})
+			.then(() => bootstrap(userToken, this.state.appID))
+			.then(() => this.onAuthenticated(userToken));
 		}).catch(err => {
-			this.onError(`Login failed: ${err.message}`)
+			console.error('register fail:', err);
+			this.onError(`Register failed: ${err.message}`)
 		})
 	}
 
@@ -1714,7 +1791,7 @@ class App extends React.Component {
 	}
 
 	closeSession(){
-		if( this.state.conn ){
+		if( this.state.conn && typeof this.state.conn.close == 'function' ){
 			this.state.conn.close();
 		}
 	}
@@ -1820,6 +1897,11 @@ class App extends React.Component {
 						name
 						value
 					}
+				}
+			`}/>;
+			case 'GLOBAL_EDIT':    return <GlobalEditPane {...props} query={`
+				nodes(type:App){
+					id
 				}
 			`}/>;
 			case 'NODE_EDIT':    return <NodeEditPane {...props} query={`
@@ -1935,7 +2017,8 @@ class Chrome extends React.Component {
 	_dismissToast = () => {
 		const toasts = this.state.toasts.slice();
 		toasts.shift();
-		this.setState({ toasts });
+		const autohide = !toasts[0] || !(toasts[0].action && toasts[0].action.onClick);
+		this.setState({ toasts, autohide });
 	}
 
 	_toast = (err, action) => {
@@ -1960,11 +2043,7 @@ class Chrome extends React.Component {
 			text: msg,
 			action,
 		};
-		if( action && action.important ){
-			toasts.unshift(t);
-		} else {
-			toasts.push(t);
-		}
+		toasts.unshift(t);
 		const autohide = !(toasts[0].action && toasts[0].action.onClick);
 		this.setState({toasts, autohide});
 		if( !(/unpublished|offline/).test(msg) ){
@@ -1977,6 +2056,7 @@ class Chrome extends React.Component {
 			userToken: this.state.userToken,
 			id,
 		})
+		.then(() => bootstrap(this.state.userToken, id))
 		.then(this._selectApp)
 		.catch(this._toast)
 	}
