@@ -72,7 +72,7 @@ func newDBTokenSet(claims Claims, roles ...string) ([]*db.Token, error) {
 		}
 		c["role"] = role
 		expire := time.Now().Add(time.Hour * 24 * 365 * 10)
-		jt, err := EncodeClaims(claims, expire)
+		jt, err := EncodeClaims(c, expire)
 		if err != nil {
 			return nil, err
 		}

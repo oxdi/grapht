@@ -303,7 +303,9 @@ class AppLayout extends Component {
 				{main}
 			</div>
 			<div style={styles.preview} onClickCapture={this._captureClick}>
-				{this.props.preview}
+				<div>
+					{this.props.preview}
+				</div>
 			</div>
 		</div>;
 	}
@@ -352,7 +354,7 @@ class AppSidebar extends Component {
 	}
 
 	render(){
-		const contentTypes = this.state.data.types.filter(t => {
+		const contentTypes = this.state.data.types.sort((a,b) => a.id < b.id).filter(t => {
 			return t.name != "App";
 		}).map(t =>
 			 <ListItem key={t.id} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
@@ -771,8 +773,11 @@ class TypeListPane extends Component {
 	_clickAdd = () => {
 		this.conn().then(conn => {
 			return conn.setType({
-				id: uuid.v4(),
-				name: `NewType`
+				id: uuid.v1(),
+				name: 'NewType',
+				fields: [
+					{name:"name", friendlyName:"Name", type:"Text"},
+				]
 			})
 		}).then(type => {
 			this.go('TYPE_EDIT', {id: type.id});
@@ -799,7 +804,7 @@ class TypeListPane extends Component {
 					title="Types"
 				/>
 				<List>
-					{data.types.map(t => this.typeItem(t) )}
+					{data.types.sort((a,b) => a.id < b.id).map(t => this.typeItem(t) )}
 				</List>
 			</Scroll>
 			<FloatingAddButton onClick={this._clickAdd} />
@@ -946,7 +951,7 @@ class ImageAttr extends Component {
 		const { name, size, type, lastModifiedDate } = file;
 		this.conn().then(conn => {
 			return conn.setNode({
-				id: uuid.v4(),
+				id: uuid.v1(),
 				type: "Image",
 				attrs: [
 					{name: "name", value:name, enc:"UTF8"},
@@ -1384,7 +1389,7 @@ class NodeListPane extends Component {
 	_clickAdd = () => {
 		this.conn().then(conn => {
 			return conn.setNode({
-				id: uuid.v4(),
+				id: uuid.v1(),
 				typeID: this.props.typeID,
 			})
 		}).then((node) => {
