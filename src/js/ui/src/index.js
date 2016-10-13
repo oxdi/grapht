@@ -354,7 +354,7 @@ class AppSidebar extends Component {
 	}
 
 	render(){
-		const contentTypes = this.state.data.types.sort((a,b) => a.id < b.id).filter(t => {
+		const contentTypes = this.state.data.types.sort((a,b) => a.name < b.name).filter(t => {
 			return t.name != "App";
 		}).map(t =>
 			 <ListItem key={t.id} primaryText={t.name} onClick={this._clickContent.bind(this, t)} />
@@ -804,7 +804,7 @@ class TypeListPane extends Component {
 					title="Types"
 				/>
 				<List>
-					{data.types.sort((a,b) => a.id < b.id).map(t => this.typeItem(t) )}
+					{data.types.sort((a,b) => a.name < b.name).map(t => this.typeItem(t) )}
 				</List>
 			</Scroll>
 			<FloatingAddButton onClick={this._clickAdd} />
