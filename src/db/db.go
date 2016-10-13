@@ -62,20 +62,21 @@ func (db *DB) closeConnection(conn *Conn) error {
 	return nil
 }
 
-func (db *DB) NewConnection(claims Claims) (*Conn, error) {
+func (db *DB) NewConnection(claims Claims, tokens []*Token) (*Conn, error) {
 	db.RLock()
 	defer db.RUnlock()
 	c := &Conn{
 		db:     db,
 		g:      db.g,
 		claims: claims,
+		tokens: tokens,
 	}
 	db.conns = append(db.conns, c)
 	return c, nil
 }
 
 func (db *DB) apply(m *M) error {
-	c, err := db.NewConnection(m.Claims)
+	c, err := db.NewConnection(m.Claims, nil)
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ func (db *DB) decode(log io.Reader, apply func(m *M) error) error {
 	return nil
 }
 
-func (db *DB) GetMutations(before *time.Time, after *time.Time) ([]*M, error) {
+func (db *DB) GetMutations(before time.Time, after time.Time) ([]*M, error) {
 	muts := []*M{}
 	log, err := db.newLogReader()
 	if err != nil {

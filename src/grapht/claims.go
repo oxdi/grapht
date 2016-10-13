@@ -1,6 +1,7 @@
 package main
 
 import (
+	"db"
 	"fmt"
 	"time"
 
@@ -62,10 +63,32 @@ func (c Claims) Session() (*Session, error) {
 	return sessions.Create(sid, c)
 }
 
-func EncodeClaims(claims Claims) (string, error) {
+func newDBTokenSet(claims Claims, roles ...string) ([]*db.Token, error) {
+	tokens := []*db.Token{}
+	for _, role := range roles {
+		c := Claims{}
+		for k, v := range claims {
+			c[k] = v
+		}
+		c["role"] = role
+		expire := time.Now().Add(time.Hour * 24 * 365 * 10)
+		jt, err := EncodeClaims(claims, expire)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, &db.Token{
+			Role:    role,
+			Expires: expire,
+			JWT:     jt,
+		})
+	}
+	return tokens, nil
+}
+
+func EncodeClaims(claims Claims, expire time.Time) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 	tc := token.Claims.(jwt.MapClaims)
-	tc["exp"] = time.Now().Add(time.Hour * 72).Unix()
+	tc["exp"] = expire.Unix()
 	for k, v := range claims {
 		tc[k] = v
 	}

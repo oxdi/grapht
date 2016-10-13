@@ -13,9 +13,14 @@ type Conn struct {
 	g      *graph.Graph
 	db     *DB
 	claims Claims
+	tokens []*Token
 	log    []*M
 	sync.RWMutex
 	OnChange func()
+}
+
+func (c *Conn) GetTokens() ([]*Token, error) {
+	return c.tokens, nil
 }
 
 func (c *Conn) Query(query string) *graphql.Result {

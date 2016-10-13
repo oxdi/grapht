@@ -305,6 +305,11 @@ class AppSidebar extends Component {
 		this.props.closeSidebarIfFloating();
 	}
 
+	_clickTokens = () => {
+		this.go('TOKEN_LIST');
+		this.props.closeSidebarIfFloating();
+	}
+
 	_clickContent = (type) => {
 		this.go('NODE_LIST', {typeID: type.id});
 		this.props.closeSidebarIfFloating();
@@ -320,6 +325,7 @@ class AppSidebar extends Component {
 					<ListItem key="types" primaryText="Types" onClick={this._clickTypes} />,
 				]} />
 				<ListItem primaryText="History" leftIcon={<FontIcon>restore</FontIcon>} onClick={this._clickHistory} />
+				<ListItem primaryText="Tokens" leftIcon={<FontIcon>code</FontIcon>} onClick={this._clickTokens} />
 				<ListItem primaryText="Logout" leftIcon={<FontIcon>exit_to_app</FontIcon>} onClick={this._clickLogout} />
 				<ListItem primaryText="Switch App" leftIcon={<FontIcon>shuffle</FontIcon>} onClick={this._clickClose} />
 			</List>
@@ -644,6 +650,39 @@ class TypeEditPane extends Component {
 	}
 }
 
+class TokensPane extends Component {
+
+	render(){
+		const {tokens} = this.state.data;
+		const rows = tokens.map(t =>
+			<TableRow key={t.role}>
+				<TableColumn>{t.role}</TableColumn>
+				<TableColumn>{moment(t.expires).fromNow()}</TableColumn>
+				<TableColumn><code>{t.jwt}</code></TableColumn>
+			</TableRow>
+		);
+		return <div>
+			<Scroll>
+				<Toolbar
+					actionLeft={<IconButton onClick={this.props.onToggleSidebar}>menu</IconButton>}
+					title="Tokens"
+				/>
+				<DataTable>
+					<TableHeader>
+						<TableRow>
+							<TableColumn>Role</TableColumn>
+							<TableColumn>Expires</TableColumn>
+							<TableColumn>Token</TableColumn>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{rows}
+					</TableBody>
+				</DataTable>
+			</Scroll>
+		</div>
+	}
+}
 class MutationListPane extends Component {
 
 	getActionName(query){
@@ -1209,7 +1248,6 @@ class NodeEditPane extends Component {
 			pending = false;
 			attrs = [];
 		}
-		console.log(pending, this.state.attrs);
 		this.setState({pending, attrs});
 	}
 
@@ -1730,6 +1768,13 @@ class App extends React.Component {
 		};
 		console.log('render:', this.props.pane, props)
 		switch(this.props.pane){
+			case 'TOKEN_LIST':    return <TokensPane {...props} query={`
+				tokens {
+					role
+					jwt
+					expires
+				}
+			`}/>;
 			case 'MUTATION_LIST':    return <MutationListPane {...props} query={`
 				mutations {
 					time

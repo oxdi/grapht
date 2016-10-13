@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 	"uuid"
 
 	"github.com/labstack/echo"
@@ -99,7 +100,11 @@ func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session,
 		return nil, fmt.Errorf("no claim to app")
 	}
 	// Connect to app db
-	conn, err := app.DB.NewConnection(db.Claims(sessionClaims))
+	tokens, err := newDBTokenSet(sessionClaims, "guest", "admin")
+	if err != nil {
+		return nil, err
+	}
+	conn, err := app.DB.NewConnection(db.Claims(sessionClaims), tokens)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +146,8 @@ func (sc *SessionCollection) CreateHandler(c echo.Context, userClaims Claims) er
 	sessionClaims["role"] = params.Role
 	sessionClaims["sid"] = uuid.TimeUUID().String()
 	// Encode session claims
-	t, err := EncodeClaims(sessionClaims)
+	expire := time.Now().Add(time.Hour * 24 * 15)
+	t, err := EncodeClaims(sessionClaims, expire)
 	if err != nil {
 		return err
 	}

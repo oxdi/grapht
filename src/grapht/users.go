@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/labstack/echo"
 )
@@ -199,7 +200,7 @@ func (uc *UserCollection) AuthenticateHandler(c echo.Context) error {
 	// Create token
 	t, err := EncodeClaims(map[string]interface{}{
 		"uid": u.ID,
-	})
+	}, time.Now().Add(time.Hour*24*15))
 	if err != nil {
 		return err
 	}

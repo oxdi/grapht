@@ -1460,3 +1460,19 @@ test("mutations", function(t){
 		return true;
 	})
 });
+
+test("tokens", function(t){
+	return admin.query(`
+		tokens {
+			role
+			jwt
+			expires
+		}
+	`).then(function(res){
+		var m = res.tokens[0];
+		t.ok(m.role, 'has role');
+		t.ok(m.jwt, 'has jwt');
+		t.ok(m.expires, 'has expires');
+		return true;
+	})
+});

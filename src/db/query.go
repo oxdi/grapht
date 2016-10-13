@@ -73,6 +73,12 @@ func fill(dst interface{}, src interface{}) error {
 	return json.Unmarshal(b, dst)
 }
 
+type Token struct {
+	Role    string
+	Expires time.Time
+	JWT     string
+}
+
 func NewGraphqlContext(c *Conn) *GraphqlContext {
 	cxt := &GraphqlContext{
 		conn:      c,
@@ -99,6 +105,7 @@ type GraphqlContext struct {
 	attrInputObject       *graphql.InputObject
 	imageObject           *graphql.Object
 	edgeObject            *graphql.Object
+	tokenObject           *graphql.Object
 	mutationObject        *graphql.Object
 	connectionObject      *graphql.Object
 	nodeInterface         *graphql.Interface
@@ -1315,6 +1322,60 @@ func (cxt *GraphqlContext) SetNodeMutation() *graphql.Field {
 		},
 	}
 }
+func (cxt *GraphqlContext) TokenObject() *graphql.Object {
+	if cxt.tokenObject != nil {
+		return cxt.tokenObject
+	}
+	cxt.tokenObject = graphql.NewObject(graphql.ObjectConfig{
+		Name:   "Token",
+		Fields: graphql.Fields{},
+	})
+	cxt.tokenObject.AddFieldConfig("expires", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "when token is invalidated",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			t, ok := p.Source.(*Token)
+			if !ok {
+				return nil, castError("expires", p.Source, "*Token")
+			}
+			return t.Expires, nil
+		},
+	})
+	cxt.tokenObject.AddFieldConfig("role", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "token access role",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			t, ok := p.Source.(*Token)
+			if !ok {
+				return nil, castError("role", p.Source, "*Token")
+			}
+			return t.Role, nil
+		},
+	})
+	cxt.tokenObject.AddFieldConfig("jwt", &graphql.Field{
+		Type:        graphql.NewNonNull(graphql.String),
+		Description: "JSON Web Token",
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			t, ok := p.Source.(*Token)
+			if !ok {
+				return nil, castError("jwt", p.Source, "*Token")
+			}
+			return t.JWT, nil
+		},
+	})
+	return cxt.tokenObject
+}
+
+func (cxt *GraphqlContext) GetTokens() *graphql.Field {
+	return &graphql.Field{
+		Description: "fetch active tokens",
+		Type:        graphql.NewList(cxt.TokenObject()),
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			return cxt.conn.GetTokens()
+		},
+	}
+
+}
 
 func (cxt *GraphqlContext) MutationObject() *graphql.Object {
 	if cxt.mutationObject != nil {
@@ -1396,8 +1457,8 @@ func (cxt *GraphqlContext) GetMutations() *graphql.Field {
 		},
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			limit := struct {
-				After  *time.Time
-				Before *time.Time
+				After  time.Time
+				Before time.Time
 				First  int
 			}{}
 			err := fill(&limit, p.Args)
@@ -1463,6 +1524,7 @@ func (cxt *GraphqlContext) Schema() (*graphql.Schema, error) {
 	cxt.AddQuery("type", cxt.GetType())
 	cxt.AddQuery("types", cxt.GetTypes())
 	cxt.AddQuery("mutations", cxt.GetMutations())
+	cxt.AddQuery("tokens", cxt.GetTokens())
 	cxt.AddMutation("setType", cxt.SetTypeMutation())
 	cxt.AddMutation("setNode", cxt.SetNodeMutation())
 	cxt.AddMutation("removeNodes", cxt.RemoveMutation())

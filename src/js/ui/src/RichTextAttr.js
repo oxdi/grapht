@@ -107,7 +107,7 @@ export default class RichTextAttr extends React.Component {
 	constructor(props) {
 		super(props);
 		this.state = {
-			editorState: this.getEditorState(),
+			editorState: this.getEditorState(props),
 			showLinkDialog: false,
 		};
 	}
