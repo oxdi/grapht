@@ -1406,7 +1406,7 @@ class NodeListPane extends Component {
 			return <div>'waiting on type'</div>;
 		}
 		let type = this.state.data.type;
-		let nodes = this.state.data.nodes;
+		let nodes = this.state.data.nodes.sort((a,b) => a.name > b.name);
 		return <div>
 			<Scroll>
 				<Toolbar
