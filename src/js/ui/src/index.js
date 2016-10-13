@@ -999,6 +999,10 @@ class ImageAttr extends Component {
 		});
 	}
 
+	_clickConnection = (node) => {
+		this.go('NODE_EDIT', {id: node.id});
+	}
+
 	avatar(url){
 		return <Avatar className="avatar-amber" src={url} />;
 	}
@@ -1010,6 +1014,7 @@ class ImageAttr extends Component {
 				key={c.node.id}
 				leftAvatar={this.avatar(c.node.data.url)}
 				rightIcon={<FontIcon onClick={() => this._remove(c.node.id)}>delete</FontIcon>}
+				onClick={() => this._clickConnection(c.node)}
 				primaryText={c.node.name || ''}
 				secondaryText={c.node.data && c.node.data.contentType || ''}
 			/>
