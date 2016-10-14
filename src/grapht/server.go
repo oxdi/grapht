@@ -1,7 +1,10 @@
 package main
 
 import (
+	"db"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/facebookgo/grace/gracehttp"
@@ -54,6 +57,31 @@ func WrapClaims(h HandlerWithClaims) echo.HandlerFunc {
 	}
 }
 
+func fetchImage(c echo.Context) error {
+	app, err := apps.open(c.Param("appID"))
+	if err != nil {
+		return err
+	}
+	node := app.DB.GetNode(c.Param("nodeID"))
+	if node == nil {
+		return fmt.Errorf("no node")
+	}
+	attr := node.Attr(c.Param("attrName"))
+	if attr == nil {
+		return fmt.Errorf("no attr")
+	}
+	if attr.Value == "" {
+		return fmt.Errorf("no data")
+	}
+	r, err := db.NewImageDataReader(attr.Value)
+	if err != nil {
+		return err
+	}
+	c.Response().WriteHeader(http.StatusOK)
+	io.Copy(c.Response(), r)
+	return nil
+}
+
 func StartServer() error {
 	e := echo.New()
 	e.Use(middleware.CORS())
@@ -67,6 +95,7 @@ func StartServer() error {
 	e.POST("/authenticate", users.AuthenticateHandler)
 	e.POST("/register", users.CreateHandler)
 	e.GET("/user", WrapClaims(users.GetHandler))
+	e.GET("/assets/:appID/:nodeID/:attrName", fetchImage)
 	e.POST("/apps", WrapClaims(apps.CreateHandler))
 	e.POST("/sessions", WrapClaims(sessions.CreateHandler))
 	// Socket api

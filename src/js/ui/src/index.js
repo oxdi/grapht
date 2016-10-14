@@ -1012,7 +1012,7 @@ class ImageAttr extends Component {
 		const imgs = this.state.data.node[field.name].map(c =>
 			<ListItem
 				key={c.node.id}
-				leftAvatar={this.avatar(c.node.data.url)}
+				leftAvatar={this.avatar(c.node.data && c.node.data.url)}
 				rightIcon={<FontIcon onClick={() => this._remove(c.node.id)}>delete</FontIcon>}
 				onClick={() => this._clickConnection(c.node)}
 				primaryText={c.node.name || ''}
@@ -1144,7 +1144,13 @@ class EdgeAttr extends Component {
 						<Autocomplete
 							icon={<FontIcon>search</FontIcon>}
 							label={`Find ${typeName}...`}
-							data={data.nodes}
+							data={data.nodes.reduce((uniq,n) => {
+								if( uniq.find(existing => existing.name == n.name) ){
+									return uniq;
+								}
+								uniq.push(n);
+								return uniq;
+							},[])}
 							dataLabel="name"
 							onAutocomplete={this._add}
 							clearOnAutocomplete
@@ -1381,14 +1387,6 @@ class NodeListPane extends Component {
 		onToggleSidebar: PropTypes.func,
 		typeID: PropTypes.string.isRequired,
 		query: PropTypes.string.isRequired,
-	}
-
-	attr(node,fieldName){
-		let attr = node.attrs.find(attr => attr.name == fieldName);
-		if( !attr ){
-			return
-		}
-		return attr.value;
 	}
 
 	_clickAdd = () => {
@@ -1903,10 +1901,6 @@ class App extends React.Component {
 				nodes(typeID:"${props.typeID}"){
 					id
 					name
-					attrs {
-						name
-						value
-					}
 				}
 			`}/>;
 			case 'GLOBAL_EDIT':    return <GlobalEditPane {...props} query={`

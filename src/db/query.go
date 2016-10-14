@@ -79,6 +79,13 @@ type Token struct {
 	JWT     string
 }
 
+type ImageKey struct {
+	DBName   string
+	NodeID   string
+	AttrName string
+	Data     string
+}
+
 func NewGraphqlContext(c *Conn) *GraphqlContext {
 	cxt := &GraphqlContext{
 		conn:      c,
@@ -210,25 +217,25 @@ func (cxt *GraphqlContext) ImageObject() *graphql.Object {
 					if err := fill(&args, p.Args); err != nil {
 						return nil, err
 					}
-					data, ok := p.Source.(string)
+					key, ok := p.Source.(*ImageKey)
 					if !ok {
-						return nil, castError("url", p.Source, "string")
+						return nil, castError("url", p.Source, "*ImageKey")
 					}
-					if args.Scheme == "HTTP" {
-						return "//fixme.com/image.jpg", nil
+					if args.Scheme == "DATA" {
+						return "data:" + key.Data, nil
 					}
-					return "data:" + data, nil
+					return fmt.Sprintf("//dev.oxdi.co.uk/assets/%s/%s/%s", key.DBName, key.NodeID, key.AttrName), nil
 				},
 			},
 			"contentType": &graphql.Field{
 				Type:        graphql.String,
 				Description: "content type of image",
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					data, ok := p.Source.(string)
+					key, ok := p.Source.(*ImageKey)
 					if !ok {
-						return nil, castError("url", p.Source, "string")
+						return nil, castError("url", p.Source, "*ImageKey")
 					}
-					parts := strings.Split(data, ",")
+					parts := strings.Split(key.Data, ",")
 					if len(parts) == 0 {
 						return nil, nil
 					}
@@ -269,6 +276,9 @@ func (cxt *GraphqlContext) AttrObject() *graphql.Object {
 					attr, ok := p.Source.(*graph.Attr)
 					if !ok {
 						return "", nil
+					}
+					if attr.Enc == "DataURI" {
+						return "<data>", nil
 					}
 					return attr.Value, nil
 				},
@@ -769,6 +779,12 @@ func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
 			if attr == nil {
 				return nil, nil
 			}
+			key := &ImageKey{
+				DBName:   cxt.conn.db.Name,
+				NodeID:   n.ID(),
+				AttrName: f.Name,
+				Data:     attr.Value,
+			}
 			if attr.Enc != "DataURI" {
 				return nil, fmt.Errorf("cannot decode image from %s", attr.Enc)
 			}
@@ -778,9 +794,12 @@ func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
 					return nil, err
 				}
 				img = resizeImage(img, &cfg)
-				return encodeImageDataURI(img)
+				key.Data, err = encodeImageDataURI(img)
+				if err != nil {
+					return nil, err
+				}
 			}
-			return string(attr.Value), nil
+			return key, nil
 		},
 	}
 }

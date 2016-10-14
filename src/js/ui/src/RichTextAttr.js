@@ -30,6 +30,7 @@ import SelectField from 'react-md/lib/SelectFields';
 import Autocomplete from 'react-md/lib/Autocompletes';
 import AttrToolbar from './AttrToolbar';
 import Sticky from './Sticky';
+import Component from './Component';
 
 const Link = ({entityKey, children}) => {
 	const { url } = Entity.get(entityKey).getData();
@@ -190,13 +191,13 @@ export default class RichTextAttr extends React.Component {
 		this.refs.sticky.updateBounds();
 	}
 
-	_setLink = ({type,id,url}) => {
+	_setLink = ({linkType,type,id,url}) => {
 		const { editorState } = this.state;
-		const key = type == 'INT' ?
+		const key = linkType == 'INT' ?
 			Entity.create(
 				'NODE_LINK',
 				'MUTABLE',
-				{id}
+				{type,id}
 			) :
 			Entity.create(
 				'LINK',
@@ -289,6 +290,15 @@ export default class RichTextAttr extends React.Component {
 				isOpen={this.state.showLinkDialog}
 				onCancel={this._hideLinkDialog}
 				onSetLink={this._setLink}
+				query={`
+					nodes {
+						id
+						name
+						type {
+							name
+						}
+					}
+				`}
 			/>
 			{field.hint ? <p className="md-caption">{field.hint}</p> : null}
 			<Divider />
@@ -297,7 +307,7 @@ export default class RichTextAttr extends React.Component {
 
 }
 
-class LinkDialog extends React.Component {
+class LinkDialog extends Component {
 
 	static propTypes = {
 		isOpen: PropTypes.bool.isRequired,
@@ -305,18 +315,28 @@ class LinkDialog extends React.Component {
 		onSetLink: PropTypes.func.isRequired,
 	}
 
-	state = {linkType:'INT',linkURL:'',data:{}}
+	constructor(...args){
+		super(...args);
+		this.state = this.state || {};
+		this.state.linkType = 'INT';
+		this.state.linkURL = '';
+	}
 
 	_cancel = () => {
 		this.props.onCancel();
 	}
 
 	_confirm = () => {
-		this.props.onSetLink({
-			type: this.state.linkType,
-			url: this.state.linkURL,
-			id: this.state.linkID,
-		});
+		const { linkURL, linkNode, linkType } = this.state;
+		const link = { linkType };
+		if (linkType == 'INT') {
+			link.type = linkNode.type.name;
+			link.id = linkNode.id;
+		} else {
+			link.url = linkURL;
+		}
+		console.log('setLink', link);
+		this.props.onSetLink(link);
 	}
 
 	_setTab = (idx) => {
@@ -325,15 +345,39 @@ class LinkDialog extends React.Component {
 	}
 
 	_setLinkURL = (linkURL) => {
-		this.setState({linkURL})
+		this.setState({
+			linkURL,
+			node: null,
+		})
+	}
+
+	_setLinkNode = (name) => {
+		const { nodes } = this.state.data;
+		const linkNode = nodes.find(n => n.name == name);
+		this.setState({
+			linkNode,
+			linkURL: '',
+		})
 	}
 
 	renderInternalTab() {
+		const { nodes } = this.state.data;
+
 		return <div>
 			<Autocomplete
-				label="Link to"
-				data={[]}
-				fullWidth
+				icon={<FontIcon>search</FontIcon>}
+				label={`Find item...`}
+				data={nodes.reduce((uniq,n) => {
+					if( uniq.find(existing => existing.name == n.name) ){
+						return uniq;
+					}
+					uniq.push(n);
+					return uniq;
+				},[])}
+				dataLabel="name"
+				onAutocomplete={this._setLinkNode}
+				clearOnAutocomplete
+				floatingLabel={false}
 			/>
 		</div>;
 	}

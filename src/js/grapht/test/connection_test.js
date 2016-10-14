@@ -696,6 +696,18 @@ test("create an image", function(t){
 			{name:"name", value:"original.jpg", enc:"UTF8"},
 			{name:"data", value: IMAGE_DATA, enc:"DataURI"},
 		]
+	},`
+		attrs {
+			name
+			value
+		}
+	`).then((res) => {
+		t.same(res, {
+			attrs: [
+				{name:"name", value:"original.jpg"},
+				{name:"data", value:"<data>"},
+			]
+		})
 	})
 });
 
@@ -707,7 +719,7 @@ test("set image on cheddar-post", function(t){
 	})
 });
 
-test("fetch image url (data-uri by default)", function(t){
+test("fetch image with scheme:DATA", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
@@ -715,7 +727,7 @@ test("fetch image url (data-uri by default)", function(t){
 					node {
 						...on Image {
 							data {
-								url
+								url(scheme:DATA)
 							}
 						}
 					}
@@ -724,17 +736,7 @@ test("fetch image url (data-uri by default)", function(t){
 		}
 	`)
 	.then(function(data){
-		return t.same(data, {
-			post: {
-				images: [{
-					node:{
-						data: {
-							url: `data:${IMAGE_DATA}`,
-						}
-					}
-				}]
-			}
-		})
+		return t.equal(data.post.images[0].node.data.url, `data:${IMAGE_DATA}`);
 	})
 });
 
@@ -772,10 +774,11 @@ test("fetch image url and contentType", function(t){
 				images {
 					node {
 						...on Image {
+							id
 							name
 							data {
 								contentType
-								url(scheme:DATA)
+								url
 							}
 						}
 					}
@@ -784,29 +787,21 @@ test("fetch image url and contentType", function(t){
 		}
 	`)
 	.then(function(data){
-		return t.same(data, {
-			post: {
-				images: [{
-					node: {
-						name: "original.jpg",
-						data: {
-							contentType: "image/png",
-							url: `data:${IMAGE_DATA}`,
-						}
-					}
-				}]
-			}
-		})
+		const img = data.post.images[0].node;
+		t.equal(img.name, "original.jpg");
+		t.equal(img.data.url, `//dev.oxdi.co.uk/assets/jstest/${img.id}/data`);
+		t.equal(img.data.contentType, 'image/png');
 	})
 });
 
-test("fetch image as regular (scheme:HTTP)", function(t){
+test("fetch image with scheme:HTTP ()", function(t){
 	return admin.query(`
 		post:node(id:"cheddar-post") {
 			...on Post {
 				images {
 					node {
 						...on Image {
+							id
 							data {
 								url(scheme:HTTP)
 							}
@@ -817,17 +812,8 @@ test("fetch image as regular (scheme:HTTP)", function(t){
 		}
 	`)
 	.then(function(data){
-		return t.same(data, {
-			post: {
-				images: [{
-					node : {
-						data: {
-							url: `//fixme.com/image.jpg`,
-						}
-					}
-				}]
-			}
-		})
+		const img = data.post.images[0].node;
+		t.equal(img.data.url, `//dev.oxdi.co.uk/assets/jstest/${img.id}/data`);
 	})
 });
 
@@ -840,7 +826,7 @@ test("resize image (default: fill with jpeg output format)", function(t){
 						...on Image {
 							data(width:50, height:50){
 								contentType
-								url
+								url(scheme:DATA)
 							}
 						}
 					}

@@ -6,6 +6,7 @@ import (
 	"graph"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type DB struct {
 	conns []*Conn
 	log   io.ReadWriter
 	path  string
+	Name  string
 }
 
 func (db *DB) commit(g *graph.Graph, mutations []*M) error {
@@ -131,6 +133,10 @@ func (db *DB) GetMutations(before time.Time, after time.Time) ([]*M, error) {
 	return muts, nil
 }
 
+func (db *DB) GetNode(id string) *graph.Node {
+	return db.g.Get(id)
+}
+
 func (db *DB) Close() error {
 	cs := db.conns
 	for _, c := range cs {
@@ -166,6 +172,10 @@ func Open(path string) (*DB, error) {
 		g:    graph.New(),
 		log:  f,
 		path: path,
+		Name: filepath.Base(path),
+	}
+	if db.Name == "" || db.Name == "." {
+		return nil, fmt.Errorf("invalid db.Name: %s", db.Name)
 	}
 	if err := db.replay(); err != nil {
 		return nil, err

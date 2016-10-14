@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
+	"io"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -19,6 +20,14 @@ type ResizeConfig struct {
 }
 
 func decodeImageDataURI(data string) (image.Image, error) {
+	r, err := NewImageDataReader(data)
+	if err != nil {
+		return nil, err
+	}
+	return imaging.Decode(r)
+}
+
+func NewImageDataReader(data string) (io.Reader, error) {
 	if data == "" {
 		return nil, fmt.Errorf("invalid data uri: blank")
 	}
@@ -30,9 +39,8 @@ func decodeImageDataURI(data string) (image.Image, error) {
 	if b64data == "" {
 		return nil, fmt.Errorf("invalid data uri: blank base64 data")
 	}
-	return imaging.Decode(
-		base64.NewDecoder(base64.StdEncoding, strings.NewReader(b64data)),
-	)
+	r := base64.NewDecoder(base64.StdEncoding, strings.NewReader(b64data))
+	return r, nil
 }
 
 func encodeImageDataURI(img image.Image) (string, error) {
