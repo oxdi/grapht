@@ -22,8 +22,9 @@ func isValidID(id string) bool {
 }
 
 type App struct {
-	ID string `json:"id"`
-	DB *db.DB `json:"-"`
+	ID        string `json:"id"`
+	DB        *db.DB `json:"-"`
+	ImageHost string `json:"imageHost"`
 }
 
 var apps = &AppCollection{
@@ -113,14 +114,18 @@ func (ac AppCollection) open(id string) (*App, error) {
 		return app, nil
 	}
 	// open
-	database, err := db.Open(ac.path(id))
+	database, err := db.Open(db.Config{
+		Path:      ac.path(id),
+		ImageHost: IMAGE_HOST,
+	})
 	if err != nil {
 		return nil, err
 	}
 	// cache
 	app = &App{
-		ID: id,
-		DB: database,
+		ID:        id,
+		DB:        database,
+		ImageHost: IMAGE_HOST,
 	}
 	ac.apps[id] = app
 	return app, nil

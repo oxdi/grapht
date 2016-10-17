@@ -21,12 +21,17 @@ type M struct {
 	Params    map[string]interface{} `json:"p,omitempty"`
 }
 
+type Config struct {
+	Path      string
+	ImageHost string
+}
+
 type DB struct {
 	g *graph.Graph
 	sync.RWMutex
 	conns []*Conn
 	log   io.ReadWriter
-	path  string
+	cfg   Config
 	Name  string
 }
 
@@ -149,30 +154,30 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) newLogReader() (io.Reader, error) {
-	log, err := os.Open(db.path)
+	log, err := os.Open(db.cfg.Path)
 	if err != nil {
 		return nil, err
 	}
 	return log, nil
 }
 
-func Open(path string) (*DB, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		f, err := os.Create(path)
+func Open(cfg Config) (*DB, error) {
+	if _, err := os.Stat(cfg.Path); os.IsNotExist(err) {
+		f, err := os.Create(cfg.Path)
 		if err != nil {
 			return nil, err
 		}
 		f.Close()
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR, 0600)
+	f, err := os.OpenFile(cfg.Path, os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
 	db := &DB{
 		g:    graph.New(),
 		log:  f,
-		path: path,
-		Name: filepath.Base(path),
+		cfg:  cfg,
+		Name: filepath.Base(cfg.Path),
 	}
 	if db.Name == "" || db.Name == "." {
 		return nil, fmt.Errorf("invalid db.Name: %s", db.Name)

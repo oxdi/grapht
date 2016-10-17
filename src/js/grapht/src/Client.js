@@ -71,7 +71,7 @@ export default class Client {
 				if( msg.type == 'fatal' ){
 					reject(new Error(msg.error))
 				} else if( msg.type == 'ok' ){
-					let conn = new Connection(ws);
+					let conn = new Connection(ws, sessionToken);
 					resolve(conn);
 				}
 			}

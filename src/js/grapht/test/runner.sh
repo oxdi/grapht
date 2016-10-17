@@ -10,6 +10,6 @@ trap 'cleanup' EXIT
 	cd ../../../ &&
 	rm -f data/jstest;
 	rm -f data/users.json;
-	./bin/grapht >data/jstest.testlog &
+	./bin/grapht --image-host="oxditmp.imgix.net"  >data/jstest.testlog &
 ) && xvfb-run npm test
 

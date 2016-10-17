@@ -58,11 +58,12 @@ func WrapClaims(h HandlerWithClaims) echo.HandlerFunc {
 }
 
 func fetchImage(c echo.Context) error {
-	app, err := apps.open(c.Param("appID"))
-	if err != nil {
-		return err
+	sid := c.Param("sessionID")
+	if !sessions.Exists(sid) {
+		return fmt.Errorf("invalid session id")
 	}
-	node := app.DB.GetNode(c.Param("nodeID"))
+	session := sessions.Get(sid)
+	node := session.conn.GetNode(c.Param("nodeID"))
 	if node == nil {
 		return fmt.Errorf("no node")
 	}
@@ -95,7 +96,7 @@ func StartServer() error {
 	e.POST("/authenticate", users.AuthenticateHandler)
 	e.POST("/register", users.CreateHandler)
 	e.GET("/user", WrapClaims(users.GetHandler))
-	e.GET("/assets/:appID/:nodeID/:attrName", fetchImage)
+	e.GET("/assets/:sessionID/:nodeID/:attrName", fetchImage)
 	e.POST("/apps", WrapClaims(apps.CreateHandler))
 	e.POST("/sessions", WrapClaims(sessions.CreateHandler))
 	// Socket api

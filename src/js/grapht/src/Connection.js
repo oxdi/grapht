@@ -1,4 +1,5 @@
 import Query from './Query';
+import jwtDecode from 'jwt-decode';
 
 const QUERY = "query";
 const EXEC = "exec";
@@ -22,7 +23,9 @@ const OFFLINE = new Error('Offline');
 
 export default class Connection {
 
-	constructor(ws){
+	constructor(ws, sessionToken){
+		this.sessionToken = sessionToken;
+		this.claims = jwtDecode(sessionToken);
 		this.socket = () => Promise.resolve(ws);
 		ws.onmessage = this.handleMessage;
 		ws.onclose = () => {

@@ -12,11 +12,10 @@ import (
 )
 
 type ResizeConfig struct {
-	Width    int
-	Height   int
-	Resample string
-	Method   string
-	Anchor   int
+	W  int
+	H  int
+	Q  int
+	FM string
 }
 
 func decodeImageDataURI(data string) (image.Image, error) {
@@ -51,5 +50,5 @@ func encodeImageDataURI(img image.Image) (string, error) {
 }
 
 func resizeImage(img image.Image, cfg *ResizeConfig) image.Image {
-	return imaging.Fill(img, cfg.Width, cfg.Height, imaging.Center, imaging.Lanczos)
+	return imaging.Fill(img, cfg.W, cfg.H, imaging.Center, imaging.Lanczos)
 }

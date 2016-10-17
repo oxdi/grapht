@@ -19,6 +19,10 @@ type Conn struct {
 	OnChange func()
 }
 
+func (c *Conn) GetNode(id string) *graph.Node {
+	return c.g.Get(id)
+}
+
 func (c *Conn) GetTokens() ([]*Token, error) {
 	return c.tokens, nil
 }

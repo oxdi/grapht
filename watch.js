@@ -45,7 +45,7 @@ function make(target){
 
 var server;
 function startServer(){
-	server = spawn('./bin/grapht-debug', {
+	server = spawn('./bin/grapht-debug', ['--image-host', 'oxditmp.imgix.net'], {
 		stdio: 'inherit',
 		shell: true,
 	});

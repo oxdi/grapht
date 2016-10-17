@@ -11,6 +11,7 @@ var (
 	AUTH_SECRET = "OuwfjE6rJcMOZjOpsW15QlXWLxLzYGjxTgkVK"
 	SERVER_PORT = 8282
 	DATA_DIR    = "./data/"
+	IMAGE_HOST  = "oxdi.imgix.net"
 )
 
 func Open() {
@@ -34,6 +35,12 @@ func main() {
 			Value:       "./data/",
 			Usage:       "path to data dir",
 			Destination: &DATA_DIR,
+		},
+		cli.StringFlag{
+			Name:        "image-host",
+			Value:       "oxdi.imgix.net",
+			Usage:       "domain of image CDN",
+			Destination: &IMAGE_HOST,
 		},
 	}
 	app.Action = func(c *cli.Context) error {

@@ -32,6 +32,7 @@
     "tape-run": "^2.1.4"
   },
   "dependencies": {
+    "jwt-decode": "^2.1.0",
     "whatwg-fetch": "^1.0.0"
   },
   "babel": {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"graph"
+	"net/url"
 	"reflect"
 	"regexp"
 	"sort"
@@ -84,6 +85,7 @@ type ImageKey struct {
 	NodeID   string
 	AttrName string
 	Data     string
+	Cfg      *ResizeConfig
 }
 
 func NewGraphqlContext(c *Conn) *GraphqlContext {
@@ -222,9 +224,45 @@ func (cxt *GraphqlContext) ImageObject() *graphql.Object {
 						return nil, castError("url", p.Source, "*ImageKey")
 					}
 					if args.Scheme == "DATA" {
+						if key.Cfg.W != 0 || key.Cfg.H != 0 {
+							img, err := decodeImageDataURI(key.Data)
+							if err != nil {
+								return nil, err
+							}
+							img = resizeImage(img, key.Cfg)
+							key.Data, err = encodeImageDataURI(img)
+							if err != nil {
+								return nil, err
+							}
+						}
 						return "data:" + key.Data, nil
 					}
-					return fmt.Sprintf("//oxdi.imgix.net/assets/%s/%s/%s?auto=compress,format,enhance", key.DBName, key.NodeID, key.AttrName), nil
+					params := url.Values{}
+					params.Add("auto", "compress,format,enhance")
+					if key.Cfg.W > 0 {
+						params.Add("w", fmt.Sprintf("%d", key.Cfg.W))
+					}
+					if key.Cfg.H > 0 {
+						params.Add("h", fmt.Sprintf("%d", key.Cfg.H))
+					}
+					if key.Cfg.Q > 0 {
+						params.Add("q", fmt.Sprintf("%d", key.Cfg.Q))
+					}
+					sid, ok := cxt.conn.claims["sid"]
+					if !ok {
+						return nil, fmt.Errorf("cannot generate image url: no claim to session")
+					}
+					if sid == "" {
+						return nil, fmt.Errorf("cannot generate image url: sid was not valid")
+					}
+					return fmt.Sprintf(
+						"//%s/assets/%s/%s/%s?%s",
+						cxt.conn.db.cfg.ImageHost,
+						sid,
+						key.NodeID,
+						key.AttrName,
+						params.Encode(),
+					), nil
 				},
 			},
 			"contentType": &graphql.Field{
@@ -235,15 +273,16 @@ func (cxt *GraphqlContext) ImageObject() *graphql.Object {
 					if !ok {
 						return nil, castError("url", p.Source, "*ImageKey")
 					}
+					// set content type to original image
+					contentType := "image/jpeg"
 					parts := strings.Split(key.Data, ",")
-					if len(parts) == 0 {
-						return nil, nil
+					if len(parts) > 0 {
+						parts = strings.Split(parts[0], ";")
+						if len(parts) > 0 {
+							contentType = parts[0]
+						}
 					}
-					parts = strings.Split(parts[0], ";")
-					if len(parts) == 0 {
-						return nil, nil
-					}
-					return parts[0], nil
+					return contentType, nil
 				},
 			},
 		},
@@ -754,10 +793,13 @@ func (cxt *GraphqlContext) ArgType(fd *graph.Field) graphql.Output {
 func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
 	return &graphql.Field{
 		Args: graphql.FieldConfigArgument{
-			"width": &graphql.ArgumentConfig{
+			"w": &graphql.ArgumentConfig{
 				Type: graphql.Int,
 			},
-			"height": &graphql.ArgumentConfig{
+			"h": &graphql.ArgumentConfig{
+				Type: graphql.Int,
+			},
+			"q": &graphql.ArgumentConfig{
 				Type: graphql.Int,
 			},
 		},
@@ -784,20 +826,7 @@ func (cxt *GraphqlContext) ImageField(f *graph.Field) *graphql.Field {
 				NodeID:   n.ID(),
 				AttrName: f.Name,
 				Data:     attr.Value,
-			}
-			if attr.Enc != "DataURI" {
-				return nil, fmt.Errorf("cannot decode image from %s", attr.Enc)
-			}
-			if cfg.Width != 0 || cfg.Height != 0 {
-				img, err := decodeImageDataURI(string(attr.Value))
-				if err != nil {
-					return nil, err
-				}
-				img = resizeImage(img, &cfg)
-				key.Data, err = encodeImageDataURI(img)
-				if err != nil {
-					return nil, err
-				}
+				Cfg:      &cfg,
 			}
 			return key, nil
 		},

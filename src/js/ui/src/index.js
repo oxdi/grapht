@@ -812,6 +812,45 @@ class TypeListPane extends Component {
 	}
 }
 
+class ImageDataViewer extends Component {
+	render(){
+		const { node } = this.state.data;
+		const src = node.data && node.data.url || `http://placehold.it/${MAIN_WIDTH}?text=missing`;
+		return <img src={src} />;
+	}
+}
+
+class ImageDataAttr extends React.Component {
+
+	static propTypes = {
+		node: PropTypes.object.isRequired,
+		field: PropTypes.object.isRequired,
+		onSetAttr: PropTypes.func.isRequired,
+		type: PropTypes.string,
+	}
+
+	render(){
+		const {node,field,onSetAttr,type} = this.props;
+		return <div className="attr attr-text">
+			<Sticky ref="sticky">
+				<div className="top">
+					<AttrToolbar title={field.friendlyName || field.name} icon="image" />
+				</div>
+			</Sticky>
+			<ImageDataViewer query={`
+				node(id:"${node.id}"){
+					...on ${node.type.name} {
+						data(w:${MAIN_WIDTH}) {
+							url
+						}
+					}
+				}
+			`} />
+			<p className="md-caption">{field.hint}</p>
+			<Divider />
+		</div>;
+	}
+}
 class TextAttr extends React.Component {
 
 	static propTypes = {
@@ -1031,7 +1070,7 @@ class ImageAttr extends Component {
 		return <div className="attr attr-image">
 			<Sticky ref="sticky">
 				<div className="top">
-					<AttrToolbar title={field.friendlyName} icon="perm_media">
+					<AttrToolbar title={field.friendlyName} icon="camera_roll">
 						<FileUpload
 							multiple={false}
 							secondary
@@ -1210,6 +1249,7 @@ class Attr extends React.Component {
 		case 'Int':       return <TextAttr {...this.props} type="number" />;
 		case 'Float':     return <TextAttr {...this.props} type="number" />;
 		case 'Boolean':   return <BooleanAttr {...this.props} />;
+		case 'Image':   return <ImageDataAttr {...this.props} />;
 		case 'Edge':
 			if( field.edgeToType && field.edgeToType.name == 'Image' ){
 				return <ImageAttr {...this.props} query={`
@@ -1220,7 +1260,7 @@ class Attr extends React.Component {
 									...on Image {
 										id
 										name
-										data {
+										data(w:50,h:50) {
 											contentType
 											url
 										}
