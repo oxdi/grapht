@@ -1,5 +1,6 @@
 
 var IMAGE_DATA = "image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAABlBMVEUAAAD///+l2Z/dAAAAM0lEQVR4nGP4/5/h/1+G/58ZDrAz3D/McH8yw83NDDeNGe4Ug9C9zwz3gVLMDA/A6P9/AFGGFyjOXZtQAAAAAElFTkSuQmCC";
+var IMAGE_HOST = "oxdi.imgix.net"
 // var WebSocket = require('ws');
 var test = require('blue-tape')
 var Grapht = require('../lib/index.js');
@@ -11,6 +12,7 @@ var AUTHOR_TYPE_ID = uuid.v1();
 var POST_TYPE_ID = uuid.v1();
 var TAG_TYPE_ID = uuid.v1();
 var IMAGE_TYPE_ID = uuid.v1();
+
 
 var adminToken;
 
@@ -789,7 +791,7 @@ test("fetch image url and contentType", function(t){
 	.then(function(data){
 		const img = data.post.images[0].node;
 		t.equal(img.name, "original.jpg");
-		t.equal(img.data.url, `//dev.oxdi.co.uk/assets/jstest/${img.id}/data`);
+		t.equal(img.data.url, `//${IMAGE_HOST}/assets/jstest/${img.id}/data?auto=compress,format,enhance`);
 		t.equal(img.data.contentType, 'image/png');
 	})
 });
@@ -813,7 +815,7 @@ test("fetch image with scheme:HTTP ()", function(t){
 	`)
 	.then(function(data){
 		const img = data.post.images[0].node;
-		t.equal(img.data.url, `//dev.oxdi.co.uk/assets/jstest/${img.id}/data`);
+		t.equal(img.data.url, `//${IMAGE_HOST}/assets/jstest/${img.id}/data?auto=compress,format,enhance`);
 	})
 });
 

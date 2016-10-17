@@ -224,7 +224,7 @@ func (cxt *GraphqlContext) ImageObject() *graphql.Object {
 					if args.Scheme == "DATA" {
 						return "data:" + key.Data, nil
 					}
-					return fmt.Sprintf("//dev.oxdi.co.uk/assets/%s/%s/%s", key.DBName, key.NodeID, key.AttrName), nil
+					return fmt.Sprintf("//oxdi.imgix.net/assets/%s/%s/%s?auto=compress,format,enhance", key.DBName, key.NodeID, key.AttrName), nil
 				},
 			},
 			"contentType": &graphql.Field{
