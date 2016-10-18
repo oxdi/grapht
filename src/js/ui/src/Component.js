@@ -1,6 +1,7 @@
 import React from 'react';
 import { PropTypes } from 'react';
 import { CircularProgress } from 'react-md';
+import uuid from 'node-uuid';
 
 export default class Component extends React.Component {
 
@@ -21,7 +22,7 @@ export default class Component extends React.Component {
 
 	constructor(...args){
 		super(...args);
-		this.uniqueID = `${this.constructor.name}_${Date.now()}`;
+		this.uniqueID = `${this.constructor.name}_${uuid.v1()}`;
 		this.mounted = true;
 		this.__render = this.render;
 		this.render = () => {

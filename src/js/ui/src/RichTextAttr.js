@@ -373,7 +373,7 @@ class LinkDialog extends Component {
 					}
 					uniq.push(n);
 					return uniq;
-				},[])}
+				},[]).filter(n => n.name)}
 				dataLabel="name"
 				onAutocomplete={this._setLinkNode}
 				clearOnAutocomplete

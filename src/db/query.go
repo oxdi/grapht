@@ -737,7 +737,15 @@ func (cxt *GraphqlContext) NodeType(t *graph.Type) *graphql.Object {
 						c := &Connection{
 							Edge: e,
 						}
-						if e.To().ID() == n.ID() {
+						to := e.To()
+						if to == nil {
+							continue
+						}
+						from := e.From()
+						if from == nil {
+							continue
+						}
+						if to.ID() == n.ID() {
 							c.Direction = In
 						} else {
 							c.Direction = Out

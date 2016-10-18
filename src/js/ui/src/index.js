@@ -815,7 +815,7 @@ class TypeListPane extends Component {
 class ImageDataViewer extends Component {
 	render(){
 		const { node } = this.state.data;
-		const src = node.data && node.data.url || `http://placehold.it/${MAIN_WIDTH}?text=missing`;
+		const src = node.data && node.data.url || `http://placehold.it/${MAIN_WIDTH-24}x50?text=no-image`;
 		return <img src={src} />;
 	}
 }
@@ -840,7 +840,7 @@ class ImageDataAttr extends React.Component {
 			<ImageDataViewer query={`
 				node(id:"${node.id}"){
 					...on ${node.type.name} {
-						data(w:${MAIN_WIDTH}) {
+						data(w:${MAIN_WIDTH-24}) {
 							url
 						}
 					}
@@ -1031,10 +1031,13 @@ class ImageAttr extends Component {
 	};
 
 	_remove = (id) => {
+		const { node, field } = this.props;
 		this.conn().then(conn => {
-			return conn.removeNodes({
-				id: id,
-			}).catch(this._toast)
+			return conn.removeEdges({
+				[field.edgeDirection == 'Out' ? 'from' : 'to']: node.id,
+				[field.edgeDirection == 'Out' ? 'to' : 'from']: id,
+				name: field.edgeName,
+			}).catch(this._toast);
 		});
 	}
 
@@ -1052,7 +1055,11 @@ class ImageAttr extends Component {
 			<ListItem
 				key={c.node.id}
 				leftAvatar={this.avatar(c.node.data && c.node.data.url)}
-				rightIcon={<FontIcon onClick={() => this._remove(c.node.id)}>delete</FontIcon>}
+				rightIcon={<FontIcon onClick={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					this._remove(c.node.id);
+				}}>delete</FontIcon>}
 				onClick={() => this._clickConnection(c.node)}
 				primaryText={c.node.name || ''}
 				secondaryText={c.node.data && c.node.data.contentType || ''}
@@ -1106,11 +1113,19 @@ class EdgeAttr extends Component {
 
 	_remove = (id) => {
 		const {node, field} = this.props;
-		this.props.onRemoveEdge({
-			from: node.id,
-			to: id,
-			name: field.edgeName,
-		})
+		if (field.edgeDirection == 'In'){
+			this.props.onRemoveEdge({
+				to: node.id,
+				from: id,
+				name: field.edgeName,
+			})
+		} else {
+			this.props.onRemoveEdge({
+				from: node.id,
+				to: id,
+				name: field.edgeName,
+			})
+		}
 	}
 
 	_add = (name) => {
@@ -1144,7 +1159,7 @@ class EdgeAttr extends Component {
 		const { data } = this.state;
 		const {node, field} = this.props;
 		const items = node.connections.reduce((nodes,c) => {
-			if( c.name != field.edgeName ){ // ignore other connections
+			if( field.edgeName && c.name != field.edgeName ){ // ignore other connections
 				return nodes;
 			}
 			if( field.edgeDirection && c.direction != field.edgeDirection ){ // ignore other directions
@@ -1167,8 +1182,9 @@ class EdgeAttr extends Component {
 				leftAvatar={this.avatar(node)}
 				onClick={() => this._clickConnection(node)}
 				rightIcon={<FontIcon onClick={(e) => {
-					e.preventDefault()
-					this._remove(node.id)
+					e.stopPropagation();
+					e.preventDefault();
+					this._remove(node.id);
 				}}>delete</FontIcon>}
 			/>;
 		});
@@ -1189,7 +1205,7 @@ class EdgeAttr extends Component {
 								}
 								uniq.push(n);
 								return uniq;
-							},[])}
+							},[]).filter(n => n.name && n.id)}
 							dataLabel="name"
 							onAutocomplete={this._add}
 							clearOnAutocomplete
@@ -1385,8 +1401,9 @@ class NodeEditPane extends Component {
 	}
 
 	optimisticNode(){
-		return Object.assign({}, this.state.data.node, {
-			attrs: this.state.data.node.attrs.map(a => {
+		const { node } = this.state.data;
+		return Object.assign({}, node, {
+			attrs: node.attrs.map(a => {
 				const optAttr = this.state.attrs.find(oa => oa.name == a.name);
 				return optAttr || a
 			})
@@ -2141,7 +2158,7 @@ class Chrome extends React.Component {
 		}
 		let url = 'about:blank';
 		if (/ilios/.test(this.state.appID)) {
-			url = 'http://toolbox.oxdi.eu:3000';
+			url = 'http://d3f3lnkptqbvdv.cloudfront.net/index.html';
 		} else if ( /fairlight/.test(this.state.appID)) {
 			url = 'http://google.com/';
 		}
