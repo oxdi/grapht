@@ -1859,6 +1859,7 @@ class App extends React.Component {
 		conn.onDirty = this._showDirtyToast;
 		conn.onClean = this._hideDirtyToast;
 		conn.onClose = this._showOfflineToast;
+		conn.onError = this.props.onError;
 		this.setState({conn: Promise.resolve(conn)});
 		return conn;
 	}
@@ -2110,6 +2111,7 @@ class Chrome extends React.Component {
 		const t = {
 			key: Date.now(),
 			text: msg,
+			autohideTimeout: 7000,
 			action,
 		};
 		toasts.unshift(t);
@@ -2136,6 +2138,9 @@ class Chrome extends React.Component {
 
 	_removeAppID = () => {
 		this.setState({appID: null})
+		localStorage.setItem('sessionToken', null);
+		localStorage.setItem('appID', null);
+		window.location.reload();
 	}
 
 	_removeUserToken = () => {
@@ -2166,9 +2171,9 @@ class Chrome extends React.Component {
 		}
 		let url = 'about:blank';
 		if (/ilios/.test(this.state.appID)) {
-			url = 'http://d3f3lnkptqbvdv.cloudfront.net/index.html';
+			url = 'http://d3f3lnkptqbvdv.cloudfront.net/';
 		} else if ( /fairlight/.test(this.state.appID)) {
-			url = 'http://google.com/';
+			url = 'http://master.fairlightjones.s3.oxdi.co.uk/';
 		}
 		const layoutStyle = {};
 		if( this.state.toasts.length > 0 ){

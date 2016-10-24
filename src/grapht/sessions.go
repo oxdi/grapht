@@ -37,6 +37,12 @@ func (s *Session) OnChange() {
 	}
 }
 
+func (s *Session) OnConflict(conflict *db.Conflict) {
+	for _, client := range s.clients {
+		client.OnConflict(conflict)
+	}
+}
+
 func (s *Session) Connect(ws *websocket.Conn) *Client {
 	c := &Client{
 		ws:            ws,
@@ -116,10 +122,9 @@ func (sc *SessionCollection) Create(sid string, sessionClaims Claims) (*Session,
 	}
 	sc.sessions = append(sc.sessions, session)
 	// Add OnChange handler
-	conn.OnChange = func() {
-		fmt.Println("Running conn.OnChnage")
-		session.OnChange()
-	}
+	conn.OnChange = session.OnChange
+	// Add conflict handler (ok more like notifier than handler)
+	conn.OnConflict = session.OnConflict
 	return session, nil
 }
 

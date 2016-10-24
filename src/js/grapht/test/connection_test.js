@@ -1205,7 +1205,7 @@ test("rebase should drop conflicting changes", function(t){
 			node: {
 				id: "guest-post2"
 			}
-		}, 'the edge guest created should no longer exist (since it was conflicting) but the node should be fine');
+		}, 'conflicting edge should no longer exist');
 	})
 	.catch(t.threw);
 })

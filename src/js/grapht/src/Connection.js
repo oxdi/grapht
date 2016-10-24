@@ -72,6 +72,8 @@ export default class Connection {
 			this.handlePromiseMessage(msg)
 		} else if( this.subscriptions[msg.subscription] ){
 			this.handleSubscriptionMessage(msg);
+		} else if (msg.error) {
+			this.handleError(msg);
 		} else {
 			throw new Error('unhandled msg: '+evt.data);
 		}
@@ -95,6 +97,12 @@ export default class Connection {
 			query._onData(msg);
 		} else {
 			throw new Error('query subscription cannot handle msg type:'+msg.type);
+		}
+	}
+
+	handleError(msg){
+		if( this.onError ){
+			this.onError(msg.error);
 		}
 	}
 
@@ -212,6 +220,10 @@ export default class Connection {
 	}
 
 	onClose(){
+		// set by user
+	}
+
+	onConflict(msg){
 		// set by user
 	}
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"db"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -32,6 +33,13 @@ func (c *Client) Send(msg *WireMsg) error {
 	c.Lock()
 	defer c.Unlock()
 	return send(c.ws, msg)
+}
+
+func (c *Client) OnConflict(conflict *db.Conflict) {
+	c.Send(&WireMsg{
+		Type:  "error",
+		Error: "Some of your unpublished changes were lost due to conflicts caused by another user",
+	})
 }
 
 func (c *Client) OnMessage(msg *WireMsg) error {

@@ -17,6 +17,11 @@ func resultErr(result *graphql.Result) error {
 	return nil
 }
 
+type Conflict struct {
+	Mutation *M
+	Err      error
+}
+
 type Conn struct {
 	g      *graph.Graph
 	db     *DB
@@ -24,7 +29,8 @@ type Conn struct {
 	tokens []*Token
 	log    []*M
 	sync.RWMutex
-	OnChange func()
+	OnChange   func()
+	OnConflict func(*Conflict)
 }
 
 func (c *Conn) GetNode(id string) *graph.Node {
@@ -109,6 +115,12 @@ func (c *Conn) rebase(g *graph.Graph) error {
 	for _, m := range c.log {
 		if err := c.apply(m); err != nil {
 			fmt.Println("dropping conflicting mutation during rebase:", m, err)
+			if c.OnConflict != nil {
+				c.OnConflict(&Conflict{
+					Mutation: m,
+					Err:      err,
+				})
+			}
 		} else {
 			log = append(log, m)
 		}
