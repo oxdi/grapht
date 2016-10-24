@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
 	"time"
 )
@@ -35,29 +34,41 @@ type DB struct {
 	Name  string
 }
 
-func (db *DB) commit(g *graph.Graph, mutations []*M) error {
+func (db *DB) commit(mutations []*M) error {
 	db.Lock()
 	defer db.Unlock()
 	enc := json.NewEncoder(db.log)
 	for _, m := range mutations {
-		err := enc.Encode(m)
-		if err != nil {
+		fmt.Println("calling db.apply", m)
+		if err := db.apply(m); err != nil {
+			return err
+		}
+		if err := enc.Encode(m); err != nil {
 			return err
 		}
 	}
-	db.g = g
-	// overwrite unwritten changes on all connections
-	// TODO: try to merge changes
+	// rebase graph on all connections
 	for _, c := range db.conns {
-		c.update(db.g)
-		c.log = []*M{}
+		err := c.rebase(db.g)
+		if err != nil {
+			fmt.Println("a connection could not be rebased so will be reset (unpublished changes will be lost)")
+		}
+		if c.OnChange != nil {
+			fmt.Println("calling on change for", c)
+			c.OnChange()
+		}
 	}
+	fmt.Println("done committing")
 	return nil
 }
 
 func (db *DB) closeConnection(conn *Conn) error {
 	db.Lock()
 	defer db.Unlock()
+	return db.closeConnectionWithoutLock(conn)
+}
+
+func (db *DB) closeConnectionWithoutLock(conn *Conn) error {
 	conns := []*Conn{}
 	for _, c := range db.conns {
 		if c == conn {
@@ -72,6 +83,10 @@ func (db *DB) closeConnection(conn *Conn) error {
 func (db *DB) NewConnection(claims Claims, tokens []*Token) (*Conn, error) {
 	db.RLock()
 	defer db.RUnlock()
+	return db.newConnection(claims, tokens)
+}
+
+func (db *DB) newConnection(claims Claims, tokens []*Token) (*Conn, error) {
 	c := &Conn{
 		db:     db,
 		g:      db.g,
@@ -83,19 +98,17 @@ func (db *DB) NewConnection(claims Claims, tokens []*Token) (*Conn, error) {
 }
 
 func (db *DB) apply(m *M) error {
-	c, err := db.NewConnection(m.Claims, nil)
+	c, err := db.newConnection(m.Claims, nil)
 	if err != nil {
 		return err
 	}
-	defer c.Close()
-	result := c.ExecWithParams(m.Query, m.Params) //TODO: handle errors!
-	if len(result.Errors) > 0 {
-		striper := regexp.MustCompile(`\n`)
-		fmt.Println("\nfailed to apply mutation", striper.ReplaceAllString(m.Query, " "), m.Params)
-		for _, err := range result.Errors {
-			fmt.Println("|--", err)
-		}
+	defer c.close()
+	fmt.Println("calling c.apply")
+	if err := c.apply(m); err != nil {
+		fmt.Println("done c.apply (fail)")
+		return err
 	}
+	fmt.Println("done c.apply")
 	db.g = c.g
 	return nil
 }

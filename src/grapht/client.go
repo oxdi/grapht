@@ -98,6 +98,7 @@ func (c *Client) newQueryFunc(msg *WireMsg) func() {
 		result := c.session.conn.QueryWithParams(msg.Query, msg.Params)
 		dataHash := c.hashResult(result)
 		if msg.dataHash == dataHash {
+			fmt.Println(msg.Subscription, "UNCHANGED")
 			return
 		}
 		msg.dataHash = dataHash
@@ -127,10 +128,18 @@ func (c *Client) SendError(err error, tag string) error {
 	})
 }
 
-func (c *Client) Accept() error {
+func (c *Client) Accept() (err error) {
+	defer func() {
+		if err == nil {
+			if r := recover(); r != nil {
+				fmt.Println("Accept panic:", r)
+				err = fmt.Errorf("recover: %s", r)
+			}
+		}
+	}()
 	_, data, err := c.ws.ReadMessage()
 	if err != nil {
-		return nil
+		return
 	}
 	var msg WireMsg
 	// fmt.Println("RECV", data)
@@ -138,15 +147,15 @@ func (c *Client) Accept() error {
 	if err != nil {
 		fmt.Println("Unmarshal err ->", err)
 		c.SendError(err, "")
-		return nil
+		return
 	}
 	err = c.OnMessage(&msg)
 	if err != nil {
 		fmt.Println("OnMessage err ->", err)
 		c.SendError(err, msg.Tag)
-		return nil
+		return
 	}
-	return nil
+	return
 }
 
 func (c *Client) AcceptLoop() error {

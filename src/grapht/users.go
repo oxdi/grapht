@@ -106,9 +106,13 @@ func (uc *UserCollection) GetByEmail(email string) (*User, error) {
 }
 
 func (uc *UserCollection) Authenticate(id string, pw string) (*User, error) {
+	// Get by id or email
 	u, err := uc.Get(id)
 	if err != nil {
-		return nil, err
+		u, _ = uc.GetByEmail(id)
+		if u == nil {
+			return nil, err
+		}
 	}
 	if u == nil {
 		return nil, fmt.Errorf("nil user returned")

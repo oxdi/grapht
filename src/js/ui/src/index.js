@@ -1145,10 +1145,15 @@ class EdgeAttr extends Component {
 				name: field.edgeName,
 			})
 		}
+		this.setState({autoCompleteValue: ''});
 	}
 
 	_clickConnection = (node) => {
 		this.go('NODE_EDIT', {id: node.id});
+	}
+
+	onChangeAutocompleteValue = (autoCompleteValue) => {
+		this.setState({autoCompleteValue});
 	}
 
 	avatar(){
@@ -1192,6 +1197,13 @@ class EdgeAttr extends Component {
 		if( field.edgeToType && field.edgeToType.name ){
 			typeName = field.edgeToType.name;
 		}
+		const nodeData = this.state.autoCompleteValue ? data.nodes.reduce((uniq,n) => {
+			if( uniq.find(existing => existing.name == n.name) ){
+				return uniq;
+			}
+			uniq.push(n);
+			return uniq;
+		},[]).filter(n => n.name && n.id) : [];
 		return <div className="attr attr-edge">
 			<Sticky ref="sticky">
 				<div className="top">
@@ -1199,17 +1211,13 @@ class EdgeAttr extends Component {
 						<Autocomplete
 							icon={<FontIcon>search</FontIcon>}
 							label={`Find ${typeName}...`}
-							data={data.nodes.reduce((uniq,n) => {
-								if( uniq.find(existing => existing.name == n.name) ){
-									return uniq;
-								}
-								uniq.push(n);
-								return uniq;
-							},[]).filter(n => n.name && n.id)}
+							data={nodeData}
 							dataLabel="name"
 							onAutocomplete={this._add}
 							clearOnAutocomplete
 							floatingLabel={false}
+							onChange={this.onChangeAutocompleteValue}
+							value={this.state.autoCompleteValue || ''}
 						/>
 					</AttrToolbar>
 				</div>

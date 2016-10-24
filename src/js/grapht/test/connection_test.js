@@ -1054,7 +1054,9 @@ test("subscribed query should update after setNode", function(t){
 						]
 					});
 					t.equal(state.dataCount, 2);
-					resolve(true);
+					admin.commit()
+						.then(() => resolve(true))
+						.catch(t.threw);
 					break;
 				default:
 					resolve(Promise.reject(new Error('received more data than expected')))
@@ -1086,14 +1088,17 @@ test("subscription should update on guest.commit", function(t){
 						nodes: [
 							{name: "CHEESEY"}
 						]
-					});
+					}, 'initial state');
 					guest.setNode({
 						id: "cheese-tag",
 						type: "Tag",
 						attrs: [
 							{name:"name", value:"cheese", enc:"UTF8"}
 						]
-					}).then(function(){
+					}, `
+						id
+					`).then(function(res){
+						t.same(res, {id: "cheese-tag"}, 'updated tag');
 						return guest.commit();
 					}).catch(t.threw)
 					break;
@@ -1102,7 +1107,7 @@ test("subscription should update on guest.commit", function(t){
 						nodes: [
 							{name: "cheese"}
 						]
-					});
+					}, 'after commit');
 					resolve(true);
 					break;
 				default:
@@ -1110,12 +1115,99 @@ test("subscription should update on guest.commit", function(t){
 				}
 			});
 			query.on('error', function(err){
-				t.equal(state.dataCount, 2);
 				resolve(Promise.reject(new Error(err)))
 			});
 		})
 	})
+})
 
+test("rebase connection data on commit", function(t){
+	return guest.setNode({
+		type: "Post",
+		id: "guest-post1",
+	})
+	.then(() => admin.setNode({
+		type: "Post",
+		id: "admin-post1",
+	}))
+	.then(() => admin.commit())
+	.then(() => guest.query(`
+		nodes(type:Post) {
+			id
+		}
+	`))
+	.then(res => {
+		t.ok(res.nodes.find(n => n.id == "admin-post1"), 'admin-post1 should now exist');
+		t.ok(res.nodes.find(n => n.id == "guest-post1"), 'guest-post1 should still exist (rebased)');
+	})
+	.then(() => guest.commit())
+	.catch(t.threw);
+})
+
+test("rebase should drop conflicting changes", function(t){
+	return guest.setEdge({   // guest connects guest-post1 to admin-post1
+		from: "guest-post1",
+		to: "admin-post1",
+		name: "link",
+	})
+	.then(() => guest.setNode({  // guest creates another post
+		type: "Post",
+		id: "guest-post2",
+	}))
+	.then(() => guest.query(`
+		edges(from:"guest-post1", to:"admin-post1") {
+			from {
+				id
+			}
+			to {
+				id
+			}
+		}
+		node(id:"guest-post2") {
+			id
+		}
+	`))
+	.then(res => {
+		t.same(res, {
+			edges: [{
+				from: {
+					id: "guest-post1",
+				},
+				to: {
+					id: "admin-post1",
+				},
+			}],
+			node: {
+				id: "guest-post2"
+			}
+		}, 'the edge and node that guest created should exist');
+	})
+	.then(() => admin.removeNodes({  // admin deletes admin-post1
+		id: "admin-post1",
+	}))
+	.then(() => admin.commit())  // admin commits deleted post causing conflict for guest's edge
+	.then(() => guest.query(`
+		edges(from:"admin-post1", to:"guest-post1") {
+			from {
+				id
+			}
+			to {
+				id
+			}
+		}
+		node(id:"guest-post2") {
+			id
+		}
+	`))
+	.then(res => {
+		t.same(res, {
+			edges: [],
+			node: {
+				id: "guest-post2"
+			}
+		}, 'the edge guest created should no longer exist (since it was conflicting) but the node should be fine');
+	})
+	.catch(t.threw);
 })
 
 test("subscription should only update if changed", function(t){
@@ -1495,3 +1587,4 @@ test("tokens", function(t){
 		return true;
 	})
 });
+
