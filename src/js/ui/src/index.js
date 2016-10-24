@@ -2173,7 +2173,7 @@ class Chrome extends React.Component {
 		if (/ilios/.test(this.state.appID)) {
 			url = 'http://d3f3lnkptqbvdv.cloudfront.net/';
 		} else if ( /fairlight/.test(this.state.appID)) {
-			url = 'http://d2dbylku64cumf.cloudfront.net/;
+			url = 'http://d2dbylku64cumf.cloudfront.net/';
 		}
 		const layoutStyle = {};
 		if( this.state.toasts.length > 0 ){
